@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; media-src 'self' blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>Floating Pet</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-phase="IDLE_VISIBLE" data-pet-state="idle">
+  <main id="stage" aria-label="Floating Pet 桌面陪伴">
+    <section id="settingsPanel" class="surface settings-panel interactive" data-open="false" aria-labelledby="settingsTitle" aria-hidden="true">
+      <header class="surface-header">
+        <div><p class="eyebrow">控制中心</p><h1 id="settingsTitle">陪伴设置</h1></div>
+        <button id="closeSettings" class="icon-button" type="button" aria-label="关闭设置" data-tooltip="关闭"><img src="icons/x.svg" alt=""></button>
+      </header>
+
+      <p id="modelPrivacy" class="privacy-note">输入默认关闭；仅在发送消息时，文字、当前视觉帧和短音频片段会提交给模型。</p>
+
+      <div class="setting-group" aria-labelledby="inputHeading">
+        <div class="group-heading"><h2 id="inputHeading">感知输入</h2><span id="sessionRequirement">需先开始陪伴</span></div>
+        <label class="setting-row" for="micToggle">
+          <span class="setting-label"><img src="icons/mic.svg" alt=""><span>麦克风<small id="micStatus">已关闭</small></span></span>
+          <span class="switch"><input id="micToggle" data-testid="input-microphone" type="checkbox"><span></span></span>
+        </label>
+        <label class="setting-row" for="cameraToggle">
+          <span class="setting-label"><img src="icons/video.svg" alt=""><span>摄像头<small id="cameraStatus">已关闭</small></span></span>
+          <span class="switch"><input id="cameraToggle" data-testid="input-camera" type="checkbox"><span></span></span>
+        </label>
+        <div class="setting-row screen-row">
+          <span class="setting-label"><img src="icons/monitor-up.svg" alt=""><span>屏幕<small id="screenStatus">已关闭</small></span></span>
+          <label class="switch" for="screenToggle"><input id="screenToggle" data-testid="input-screen" type="checkbox" aria-label="启用屏幕"><span></span></label>
+          <label class="source-field" for="screenSource">
+            <span class="sr-only">选择屏幕来源</span>
+            <select id="screenSource" aria-label="屏幕来源"><option value="">选择窗口或屏幕</option></select>
+            <img src="icons/chevron-down.svg" alt="">
+          </label>
+        </div>
+        <video id="cameraPreview" class="camera-preview" autoplay muted playsinline hidden aria-label="摄像头预览"></video>
+      </div>
+
+      <div class="setting-group compact" aria-labelledby="behaviorHeading">
+        <h2 id="behaviorHeading">交互</h2>
+        <fieldset class="active-level">
+          <legend>主动程度</legend>
+          <div class="segmented-control">
+            <label><input id="activeQuiet" type="radio" name="activeLevel" value="quiet"><span>安静</span></label>
+            <label><input id="activeBalanced" type="radio" name="activeLevel" value="balanced" checked><span>平衡</span></label>
+            <label><input id="activeActive" type="radio" name="activeLevel" value="active"><span>主动</span></label>
+          </div>
+        </fieldset>
+        <label class="setting-row" for="dndToggle"><span class="setting-label"><img src="icons/moon.svg" alt=""><span>勿扰<small>不主动提示</small></span></span><span class="switch"><input id="dndToggle" type="checkbox"><span></span></span></label>
+        <label class="setting-row" for="presentationToggle"><span class="setting-label"><img src="icons/monitor-up.svg" alt=""><span>演示模式<small>抑制气泡和语音</small></span></span><span class="switch"><input id="presentationToggle" type="checkbox"><span></span></span></label>
+        <label class="setting-row" for="voiceToggle"><span class="setting-label"><img src="icons/volume-2.svg" alt=""><span>语音播放<small>模型语音或系统语音降级</small></span></span><span class="switch"><input id="voiceToggle" type="checkbox" checked><span></span></span></label>
+        <label class="setting-row" for="captionToggle"><span class="setting-label"><img src="icons/captions.svg" alt=""><span>字幕<small>始终可用的文字降级</small></span></span><span class="switch"><input id="captionToggle" type="checkbox" checked><span></span></span></label>
+      </div>
+    </section>
+
+    <section id="assistCard" class="surface assist-card interactive" data-open="false" aria-labelledby="assistTitle" aria-hidden="true">
+      <header class="surface-header">
+        <div><p class="eyebrow"><span class="model-dot"></span><span id="modelLabel">模型 Adapter</span></p><h1 id="assistTitle">一起看看</h1></div>
+        <button id="closeAssist" class="icon-button" type="button" aria-label="收起协助卡" data-tooltip="收起"><img src="icons/x.svg" alt=""></button>
+      </header>
+      <div class="realtime-bar">
+        <button id="realtimeToggle" class="button realtime-toggle" type="button" aria-pressed="false"><img src="icons/volume-2.svg" alt=""><span>实时对话</span></button>
+        <span id="realtimeStatus" role="status" aria-live="polite">麦克风关闭</span>
+      </div>
+      <div id="conversation" class="conversation" aria-live="polite"></div>
+      <form id="messageForm" class="message-form">
+        <label class="sr-only" for="messageInput">输入消息</label>
+        <input id="messageInput" data-testid="text-input" maxlength="280" autocomplete="off" placeholder="继续问当前问题…">
+        <button id="sendMessage" class="icon-button primary" data-testid="send-text" type="submit" aria-label="发送" data-tooltip="发送"><img src="icons/send.svg" alt=""></button>
+      </form>
+    </section>
+
+    <section id="nudgeBubble" class="surface nudge-bubble interactive" data-open="false" data-testid="nudge" aria-label="主动询问" aria-hidden="true">
+      <p class="eyebrow"><span class="model-dot"></span><span id="nudgeModelLabel">本地线索</span></p>
+      <p id="nudgeText">这个错误似乎重复出现，需要我一起看看吗？</p>
+      <div class="action-row"><button id="acceptNudge" data-testid="nudge-accept" class="button primary" type="button">一起看看</button><button id="dismissNudge" data-testid="nudge-decline" class="button quiet" type="button">不用</button></div>
+    </section>
+
+    <div id="contextMenu" class="surface context-menu interactive" data-open="false" role="menu" aria-hidden="true">
+      <button id="contextSession" type="button" role="menuitem"><img src="icons/play.svg" alt=""><span>开始陪伴</span></button>
+      <button id="contextPause" type="button" role="menuitem"><img src="icons/pause.svg" alt=""><span>暂停采集</span></button>
+      <button id="contextDnd" type="button" role="menuitem"><img src="icons/moon.svg" alt=""><span>勿扰</span></button>
+      <button id="contextSettings" data-testid="context-settings" type="button" role="menuitem"><img src="icons/settings.svg" alt=""><span>设置</span></button>
+      <span class="menu-separator"></span>
+      <button id="contextExit" type="button" role="menuitem"><img src="icons/power.svg" alt=""><span>退出</span></button>
+    </div>
+
+    <nav id="quickControls" class="quick-controls surface interactive" aria-label="快捷控制">
+      <button id="sessionButton" data-testid="start" class="button primary session-button" type="button"><img src="icons/play.svg" alt=""><span>开始</span></button>
+      <button id="simulateCue" data-testid="run-fake-cue" class="icon-button" type="button" aria-label="模拟重复错误" data-tooltip="模拟重复错误" disabled><img src="icons/sparkles.svg" alt=""></button>
+      <button id="dndButton" class="icon-button" type="button" aria-label="勿扰" aria-pressed="false" data-tooltip="勿扰"><img src="icons/moon.svg" alt=""></button>
+      <button id="settingsButton" class="icon-button" type="button" aria-label="设置" data-tooltip="设置"><img src="icons/settings.svg" alt=""></button>
+    </nav>
+
+    <div id="petStatus" class="pet-status interactive" data-testid="status-session" data-state="IDLE_VISIBLE"><span class="status-light"></span><span id="statusText">感知关闭</span><span id="modelBadge" class="fake-badge">Model</span></div>
+
+    <button id="pet" class="pet interactive" type="button" aria-label="Floating Pet 桌宠，拖动移动，单击互动">
+      <span class="pet-shadow"></span><img class="pet-art" src="pet.svg" alt=""><span class="speech-bars" aria-hidden="true"><i></i><i></i><i></i></span><span id="sensorBadge" class="sensor-badge" aria-label="0 项输入">0</span>
+    </button>
+
+    <p id="caption" data-testid="caption" class="caption surface" role="status" aria-live="polite" aria-atomic="true"></p>
+    <p id="toast" class="toast surface" role="status" aria-live="polite"></p>
+    <span id="statusMicrophone" data-testid="status-microphone" data-active="false" hidden></span>
+    <span id="statusCamera" data-testid="status-camera" data-active="false" hidden></span>
+    <span id="statusScreen" data-testid="status-screen" data-active="false" hidden></span>
+  </main>
+  <script src="core.js"></script>
+  <script src="realtime-playback.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

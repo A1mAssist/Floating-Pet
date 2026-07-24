@@ -1,0 +1,33 @@
+appId: cn.local.floatingpet.preview
+productName: Floating Pet
+asar: true
+compression: normal
+directories:
+  output: release
+  buildResources: build
+files:
+  - src/main.cjs
+  - src/preload.cjs
+  - src/core.cjs
+  - src/model-client.cjs
+  - src/realtime-client.cjs
+  - dist/**/*
+  - build/tray.png
+  - package.json
+  - LICENSE
+win:
+  icon: build/icon.ico
+  artifactName: Floating-Pet-${version}-${arch}.${ext}
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+    - target: zip
+      arch: [x64]
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  artifactName: Floating-Pet-Setup-${version}-${arch}.${ext}
+portable:
+  artifactName: Floating-Pet-Portable-${version}-${arch}.${ext}

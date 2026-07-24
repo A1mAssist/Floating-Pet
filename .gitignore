@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+/demo/
+/work/
+/outputs/
+/handoff.md
+/docs/superpowers/plans/
+desktop/release-preview.png
+desktop/release-realtime-preview.png
+desktop/release/
+desktop/dist/

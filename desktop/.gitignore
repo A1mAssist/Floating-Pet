@@ -1,0 +1,7 @@
+node_modules/
+dist/
+release/
+*.log
+*.enc
+release-preview.png
+release-realtime-preview.png

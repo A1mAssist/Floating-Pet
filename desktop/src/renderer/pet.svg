@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
+  <title id="title">Floating Pet</title>
+  <desc id="desc">一只有绿色耳尖和珊瑚色鼻子的原创几何桌宠</desc>
+  <path fill="#172126" d="M183 179c26-3 40 9 40 27 0 19-18 30-42 25l5-17c12 3 20-1 20-8 0-7-7-11-21-9z"/>
+  <path fill="#d9e4e2" stroke="#172126" stroke-width="8" stroke-linejoin="round" d="M72 132c-23 11-31 32-26 57 5 26 28 42 67 42h30c39 0 62-16 67-42 5-25-3-46-26-57z"/>
+  <path fill="#f8fbfa" stroke="#172126" stroke-width="8" stroke-linejoin="round" d="M62 79 75 30l38 27c10-3 20-3 30 0l38-27 13 49c10 13 15 29 15 47 0 47-32 75-81 75s-81-28-81-75c0-18 5-34 15-47z"/>
+  <path fill="#19766b" d="m72 45 26 19-30 13zM184 45l-26 19 30 13z"/>
+  <ellipse cx="95" cy="121" rx="10" ry="15" fill="#172126"/><ellipse cx="161" cy="121" rx="10" ry="15" fill="#172126"/>
+  <circle cx="91" cy="116" r="3" fill="#fff"/><circle cx="157" cy="116" r="3" fill="#fff"/>
+  <path fill="#d66b54" d="M119 143c0-7 18-7 18 0 0 6-4 10-9 10s-9-4-9-10z"/>
+  <path fill="none" stroke="#172126" stroke-width="5" stroke-linecap="round" d="M128 152v8m0 0c-7 0-12-3-15-8m15 8c7 0 12-3 15-8"/>
+  <path fill="none" stroke="#fff" stroke-opacity=".72" stroke-width="7" stroke-linecap="round" d="M82 91c11-13 26-20 46-20"/>
+  <circle cx="177" cy="189" r="17" fill="#d0a33a" stroke="#172126" stroke-width="6"/><path fill="none" stroke="#172126" stroke-width="5" stroke-linecap="round" d="M177 180v10l7 4"/>
+</svg>
