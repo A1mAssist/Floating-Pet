@@ -1090,7 +1090,7 @@
       latestFrame = null;
       const image = pendingFrame?.mediaGeneration === realtimeMediaGeneration ? pendingFrame.frame : null;
       const videoFrames = image && generation === realtimeGeneration ? [image.dataUrl.replace(/^data:image\/jpeg;base64,/, '')] : [];
-      const result = await api.realtime.append({ audio, videoFrames, forceListen: false, maxSliceNums: 1 });
+      const result = await api.realtime.append({ audio, videoFrames, maxSliceNums: 1 });
       if (result?.ok === false) throw new Error(result.code || 'append_failed');
     }, {
       onError: (error) => {

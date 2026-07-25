@@ -87,13 +87,13 @@ function validateInput(input, maxChunkBytes) {
     input.videoFrames ?? input.video_frames,
     Math.min(maxChunkBytes, MAX_REALTIME_FRAME_BYTES)
   );
-  const forceListen = input.forceListen ?? input.force_listen ?? false;
+  const forceListen = input.forceListen ?? input.force_listen;
   const maxSliceNums = input.maxSliceNums ?? input.max_slice_nums ?? 1;
-  if (typeof forceListen !== 'boolean') throw new RealtimeError('invalid_input', 'forceListen is invalid.');
+  if (forceListen != null && typeof forceListen !== 'boolean') throw new RealtimeError('invalid_input', 'forceListen is invalid.');
   if (!Number.isInteger(maxSliceNums) || maxSliceNums < 1 || maxSliceNums > 4) {
     throw new RealtimeError('invalid_input', 'maxSliceNums is invalid.');
   }
-  const normalized = { audio, video_frames: videoFrames, force_listen: forceListen, max_slice_nums: maxSliceNums };
+  const normalized = { audio, video_frames: videoFrames, max_slice_nums: maxSliceNums };
   return normalized;
 }
 

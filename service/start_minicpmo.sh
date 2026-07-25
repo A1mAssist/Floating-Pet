@@ -66,5 +66,5 @@ case "$MINICPM_MODE" in
   *) printf 'MINICPM_MODE must be chat or duplex\n' >&2; exit 2 ;;
 esac
 
-exec "$PYTHON_BIN" -m uvicorn minicpmo_server:app \
+exec "$PYTHON_BIN" -m uvicorn minicpmo_server:create_app --factory \
   --app-dir "$ROOT" --host 127.0.0.1 --port "${MINICPM_PORT:-8000}"

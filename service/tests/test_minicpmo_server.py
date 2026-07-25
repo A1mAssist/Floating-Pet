@@ -197,16 +197,22 @@ class ProtocolTest(unittest.TestCase):
                     server._public_delta_events({"audio": value}, "session", "response")
 
     @unittest.skipIf(Image is None, "Pillow is not installed")
-    def test_realtime_input_bounds_frames_and_hints(self):
+    def test_realtime_input_bounds_frames_and_slice_limit(self):
         audio = base64.b64encode(struct.pack("<f", 0.0)).decode("ascii")
         frame = base64.b64encode(make_jpeg()).decode("ascii")
         parsed = server.validate_realtime_input({
             "audio": audio,
             "video_frames": [frame],
+            "max_slice_nums": 2,
+        })
+        self.assertNotIn("force_listen", parsed)
+        self.assertEqual(parsed["max_slice_nums"], 2)
+        legacy = server.validate_realtime_input({
+            "audio": audio,
             "hints": {"force_listen": True, "max_slice_nums": 2},
         })
-        self.assertTrue(parsed["force_listen"])
-        self.assertEqual(parsed["max_slice_nums"], 2)
+        self.assertNotIn("force_listen", legacy)
+        self.assertEqual(legacy["max_slice_nums"], 2)
         with self.assertRaisesRegex(ValueError, "at most two"):
             server.validate_realtime_input({"audio": audio, "video_frames": [frame, frame, frame]})
         with self.assertRaisesRegex(ValueError, "dimensions"):

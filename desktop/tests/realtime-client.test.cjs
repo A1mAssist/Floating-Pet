@@ -72,6 +72,7 @@ test('rejects realtime PCM outside the normalized amplitude range', () => {
   const bytes = Buffer.alloc(4);
   bytes.writeFloatLE(2, 0);
   assert.throws(() => validateInput({ audio: bytes.toString('base64') }, 1024), /audio is invalid/);
+  assert.throws(() => validateInput({ audio: 'AAAAAA==', forceListen: 'yes' }, 1024), /forceListen is invalid/);
 });
 
 test('caps realtime JPEG frames at the service 1 MiB limit', () => {
@@ -159,7 +160,7 @@ test('accepts MessageEvent data inherited from its prototype', async () => {
   assert.deepEqual(events.at(-1), { type: 'text', text: 'line 1\nline 2', responseId: 'r1' });
 });
 
-test('append converts camelCase input to bounded snake_case payload', async () => {
+test('append converts camelCase input and drops deprecated forceListen from the wire payload', async () => {
   const client = makeClient();
   const socket = await handshake(client);
   const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0xd9]).toString('base64');
@@ -167,7 +168,7 @@ test('append converts camelCase input to bounded snake_case payload', async () =
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(socket.sent[1], {
     type: 'input.append',
-    input: { audio: 'AAAAAA==', video_frames: [jpeg], force_listen: true, max_slice_nums: 2 }
+    input: { audio: 'AAAAAA==', video_frames: [jpeg], max_slice_nums: 2 }
   });
   socket.message({ type: 'response.output.delta', kind: 'listen', response_id: 'r1' });
   socket.message({ type: 'response.done', response_id: 'r1' });

@@ -130,10 +130,7 @@ def decode_data_image(value: Any) -> bytes:
     declared_mime, encoded = value.split(",", 1)
     if len(encoded) > ((MAX_IMAGE_BYTES + 2) // 3) * 4:
         raise ValueError("image is too large")
-    try:
-        data = base64.b64decode(encoded, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("invalid image encoding") from exc
+    data = _decode_base64(encoded, "image")
     is_jpeg = data.startswith(b"\xff\xd8\xff")
     is_png = data.startswith(b"\x89PNG\r\n\x1a\n")
     if (declared_mime.endswith("jpeg;base64") and not is_jpeg) or (declared_mime.endswith("png;base64") and not is_png):
@@ -154,28 +151,24 @@ def _validate_wav_header(data: bytes, *, max_seconds: int = MAX_AUDIO_SECONDS) -
             channels = wav.getnchannels()
             sample_width = wav.getsampwidth()
             frames = wav.getnframes()
+            declared_length = struct.unpack_from("<I", data, 4)[0] + 8
+            if declared_length > len(data):
+                raise ValueError("WAV data is truncated")
+            if declared_length != len(data):
+                raise ValueError("invalid WAV data")
+            if not 8_000 <= sample_rate <= 96_000:
+                raise ValueError("WAV sample rate must be between 8000 and 96000 Hz")
+            if channels not in {1, 2}:
+                raise ValueError("WAV must be mono or stereo")
+            if sample_width not in {2, 4}:
+                raise ValueError("WAV sample width must be 16 or 32 bit")
+            if frames <= 0 or frames > sample_rate * max_seconds:
+                raise ValueError(f"audio duration must be between 0 and {max_seconds} seconds")
+            expected_bytes = frames * channels * sample_width
+            actual_bytes = len(wav.readframes(frames))
     except (wave.Error, EOFError, RuntimeError, ValueError) as exc:
         if isinstance(exc, ValueError):
             raise
-        raise ValueError("invalid WAV data") from exc
-    declared_length = struct.unpack_from("<I", data, 4)[0] + 8
-    if declared_length > len(data):
-        raise ValueError("WAV data is truncated")
-    if declared_length != len(data):
-        raise ValueError("invalid WAV data")
-    if not 8_000 <= sample_rate <= 96_000:
-        raise ValueError("WAV sample rate must be between 8000 and 96000 Hz")
-    if channels not in {1, 2}:
-        raise ValueError("WAV must be mono or stereo")
-    if sample_width not in {2, 4}:
-        raise ValueError("WAV sample width must be 16 or 32 bit")
-    if frames <= 0 or frames > sample_rate * max_seconds:
-        raise ValueError(f"audio duration must be between 0 and {max_seconds} seconds")
-    expected_bytes = frames * channels * sample_width
-    try:
-        with wave.open(io.BytesIO(data), "rb") as wav:
-            actual_bytes = len(wav.readframes(frames))
-    except (wave.Error, EOFError, RuntimeError) as exc:
         raise ValueError("invalid WAV data") from exc
     if actual_bytes != expected_bytes:
         raise ValueError("WAV data is truncated")
@@ -188,10 +181,7 @@ def decode_audio(value: Any) -> bytes:
     encoded = value["data"]
     if len(encoded) > ((MAX_AUDIO_BYTES + 2) // 3) * 4:
         raise ValueError("audio is too large")
-    try:
-        data = base64.b64decode(encoded, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError("invalid audio encoding") from exc
+    data = _decode_base64(encoded, "audio")
     if len(data) < 12 or len(data) > MAX_AUDIO_BYTES or data[:4] != b"RIFF" or data[8:12] != b"WAVE":
         raise ValueError("invalid WAV data")
     _validate_wav_header(data)
@@ -260,27 +250,35 @@ def normalize_messages(payload: dict[str, Any]) -> list[dict[str, Any]]:
     return leading_system + normalized[first_user:]
 
 
+def _decode_base64(value: str, label: str) -> bytes:
+    try:
+        return base64.b64decode(value, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError(f"invalid {label} encoding") from exc
+
+
 def _decode_b64(value: Any, *, max_bytes: int, label: str) -> bytes:
     if not isinstance(value, str) or not value or len(value) > ((max_bytes + 2) // 3) * 4:
         raise ValueError(f"{label} is too large or invalid")
-    try:
-        data = base64.b64decode(value, validate=True)
-    except (binascii.Error, ValueError) as exc:
-        raise ValueError(f"invalid {label} encoding") from exc
+    data = _decode_base64(value, label)
     if not data or len(data) > max_bytes:
         raise ValueError(f"{label} is too large or empty")
     return data
+
+
+def _validate_float32_samples(data: bytes, label: str) -> None:
+    for (sample,) in struct.iter_unpack("<f", data):
+        if not math.isfinite(sample):
+            raise ValueError(f"{label} contains a non-finite sample")
+        if abs(sample) > 1:
+            raise ValueError(f"{label} samples must be between -1 and 1")
 
 
 def validate_realtime_audio(value: Any) -> bytes:
     data = _decode_b64(value, max_bytes=REALTIME_AUDIO_BYTES, label="audio")
     if len(data) % 4:
         raise ValueError("audio must contain little-endian float32 samples")
-    for (sample,) in struct.iter_unpack("<f", data):
-        if not math.isfinite(sample):
-            raise ValueError("audio contains a non-finite sample")
-        if abs(sample) > 1:
-            raise ValueError("audio samples must be between -1 and 1")
+    _validate_float32_samples(data, "audio")
     return data
 
 
@@ -310,7 +308,6 @@ def validate_realtime_input(value: Any) -> dict[str, Any]:
     return {
         "audio": audio,
         "video_frames": frames,
-        "force_listen": force_listen,
         "max_slice_nums": max_slice_nums,
     }
 
@@ -346,11 +343,9 @@ def _encode_output_audio(value: Any) -> str:
     samples = np.asarray(value, dtype=np.float32)
     if samples.ndim != 1 or samples.size == 0 or samples.size > 24_000 * REALTIME_AUDIO_SECONDS:
         raise ValueError("backend audio must be a bounded mono array")
-    if not np.isfinite(samples).all():
-        raise ValueError("backend audio contains a non-finite sample")
-    if np.abs(samples).max() > 1:
-        raise ValueError("backend audio samples must be between -1 and 1")
-    return base64.b64encode(np.asarray(samples, dtype="<f4").tobytes()).decode("ascii")
+    data = np.asarray(samples, dtype="<f4").tobytes()
+    _validate_float32_samples(data, "backend audio")
+    return base64.b64encode(data).decode("ascii")
 
 
 class FakeDuplexBackend:
@@ -359,7 +354,6 @@ class FakeDuplexBackend:
     def __init__(self) -> None:
         self.prepared = False
         self.stopped = False
-        self.calls = 0
 
     def prepare(self, payload: dict[str, Any], mode: str = "audio") -> None:
         self.prepared = True
@@ -368,7 +362,6 @@ class FakeDuplexBackend:
     def process(self, request: dict[str, Any]) -> dict[str, Any]:
         if not self.prepared or self.stopped:
             raise RuntimeError("backend session is not prepared")
-        self.calls += 1
         # Ten milliseconds of deterministic silence is enough to exercise the
         # playback path without making fake tests needlessly large.
         audio = b"\x00" * (240 * 4)
@@ -377,7 +370,6 @@ class FakeDuplexBackend:
             "audio": audio,
             "is_listen": False,
             "end_of_turn": True,
-            "current_time": time.time(),
         }
 
     def stop(self) -> None:
@@ -395,7 +387,7 @@ class DuplexBackend:
     def prepare(self, payload: dict[str, Any], mode: str = "audio") -> None:
         # These arguments are part of the inspected Ascend revision.  Do not
         # pass client-provided arbitrary kwargs into the model.
-        system_prompt = payload.get("system_prompt", payload.get("instructions", ""))
+        system_prompt = payload.get("system_prompt", "")
         if not isinstance(system_prompt, str) or len(system_prompt) > MAX_TEXT_CHARS:
             raise ValueError("system_prompt is invalid")
         if mode not in {"audio", "video"}:
@@ -413,12 +405,11 @@ class DuplexBackend:
     def process(self, request: dict[str, Any]) -> dict[str, Any]:
         if not self.prepared:
             raise RuntimeError("backend session is not prepared")
-        import io as _io
         from PIL import Image
 
         frames = []
         for frame in request["video_frames"]:
-            with Image.open(_io.BytesIO(frame)) as image:
+            with Image.open(io.BytesIO(frame)) as image:
                 frames.append(image.convert("RGB").copy())
         prefill = self.model.streaming_prefill(
             audio_waveform=_audio_to_array(request["audio"]),
@@ -617,21 +608,13 @@ def _public_delta_events(result: dict[str, Any], session_id: str, response_id: s
             audio_bytes = _decode_b64(audio, max_bytes=24_000 * REALTIME_AUDIO_SECONDS * 4, label="backend audio")
             if len(audio_bytes) % 4:
                 raise ValueError("backend audio is not float32")
-            for (sample,) in struct.iter_unpack("<f", audio_bytes):
-                if not math.isfinite(sample):
-                    raise ValueError("backend audio contains a non-finite sample")
-                if abs(sample) > 1:
-                    raise ValueError("backend audio samples must be between -1 and 1")
+            _validate_float32_samples(audio_bytes, "backend audio")
             encoded = audio
         elif isinstance(audio, (bytes, bytearray, memoryview)):
             audio_bytes = bytes(audio)
             if not audio_bytes or len(audio_bytes) > 24_000 * REALTIME_AUDIO_SECONDS * 4 or len(audio_bytes) % 4:
                 raise ValueError("backend audio is not bounded float32")
-            for (sample,) in struct.iter_unpack("<f", audio_bytes):
-                if not math.isfinite(sample):
-                    raise ValueError("backend audio contains a non-finite sample")
-                if abs(sample) > 1:
-                    raise ValueError("backend audio samples must be between -1 and 1")
+            _validate_float32_samples(audio_bytes, "backend audio")
             encoded = base64.b64encode(audio_bytes).decode("ascii")
         else:
             encoded = _encode_output_audio(audio)
@@ -672,7 +655,6 @@ def create_app(
     use_fake_duplex = _env_flag("MINICPM_FAKE_DUPLEX") if fake_duplex is None else fake_duplex
     use_background_load = not _env_flag("MINICPM_PROTOCOL_TEST") if background_load is None else background_load
     state: dict[str, Any] = {
-        "mode": selected,
         "model": None,
         "backend": None,
         "loaded_at": None,
@@ -680,7 +662,6 @@ def create_app(
         "error": None,
         "fake": bool(use_fake_duplex and selected == "duplex"),
     }
-    inference_lock = threading.Lock()
     chat_lock = asyncio.Lock()
     realtime_lock = asyncio.Lock()
 
@@ -799,18 +780,17 @@ def create_app(
                 raise HTTPException(status_code=503, detail=state["error"] or _error_detail("model_loading", "model is loading"))
 
             def infer() -> Any:
-                with inference_lock:
-                    return model.chat(
-                        image=None,
-                        msgs=messages,
-                        do_sample=False,
-                        max_new_tokens=max_tokens,
-                        max_inp_length=8192,
-                        stream=False,
-                        use_tts_template=False,
-                        generate_audio=False,
-                        omni_mode=has_audio,
-                    )
+                return model.chat(
+                    image=None,
+                    msgs=messages,
+                    do_sample=False,
+                    max_new_tokens=max_tokens,
+                    max_inp_length=8192,
+                    stream=False,
+                    use_tts_template=False,
+                    generate_audio=False,
+                    omni_mode=has_audio,
+                )
 
             infer_task = asyncio.create_task(asyncio.to_thread(infer))
             try:

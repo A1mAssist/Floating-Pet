@@ -9,7 +9,6 @@ moviepy==2.2.1
 omegaconf==2.3.0
 onnxruntime==1.23.2
 openai-whisper==20250625
-python-multipart==0.0.32
 s3tokenizer==0.3.0
 token2wav-cosyvoice-stepaudio2==0.1.3
 torchaudio==2.8.0

@@ -25,7 +25,6 @@
     "@electron/asar": "4.2.0",
     "electron": "43.1.1",
     "electron-builder": "26.15.3",
-    "lucide-static": "1.25.0",
     "playwright-core": "1.61.1"
   }
 }

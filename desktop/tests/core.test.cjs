@@ -9,7 +9,9 @@ test('session reducer follows the visible product loop', () => {
   state = transition(state, { type: 'START' });
   state = transition(state, { type: 'INPUT_STARTED', kind: 'screen' });
   state = transition(state, { type: 'CUES_READY', eventKey: 'repeat-map-error' });
+  assert.equal(state.phase, PHASES.PENDING);
   state = transition(state, { type: 'SHOW_NUDGE' });
+  assert.equal(state.phase, PHASES.NUDGE);
   state = transition(state, { type: 'ACCEPT' });
   assert.equal(state.phase, PHASES.ENGAGED);
   assert.deepEqual(state.seenEventKeys, ['repeat-map-error']);
@@ -22,6 +24,18 @@ test('session reducer follows the visible product loop', () => {
 
 test('illegal transition fails closed', () => {
   assert.throws(() => transition(initialState(), { type: 'ACCEPT' }), /invalid transition/);
+});
+
+test('session reducer preserves input and suppression state', () => {
+  let state = transition(initialState(), { type: 'START' });
+  state = transition(state, { type: 'INPUT_STARTED', kind: 'microphone' });
+  state = transition(state, { type: 'SET_DND', value: true });
+  state = transition(state, { type: 'SET_PRESENTATION', value: true });
+  assert.deepEqual(state.activeInputs, ['microphone']);
+  assert.equal(state.dnd, true);
+  assert.equal(state.presentationMode, true);
+  state = transition(state, { type: 'INPUT_STOPPED', kind: 'microphone' });
+  assert.deepEqual(state.activeInputs, []);
 });
 
 test('two screen observations separated by real inference latency allow one nudge', () => {
