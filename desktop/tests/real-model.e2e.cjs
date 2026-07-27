@@ -26,7 +26,7 @@ const root = path.resolve(__dirname, '..');
     await page.waitForSelector('#pet');
     await page.click('#pet');
     await page.waitForFunction(() => document.body.dataset.phase === 'SESSION_ACTIVE');
-    await page.click('#simulateCue');
+    await page.evaluate(() => document.querySelector('#simulateCue').click());
     await page.waitForFunction(() => document.querySelector('#nudgeBubble').dataset.open === 'true', null, { timeout: 10_000 });
     await page.click('#acceptNudge');
     await page.fill('#messageInput', '只回复：桌宠真实链路已接通');

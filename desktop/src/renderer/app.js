@@ -9,6 +9,7 @@
   const inputStatus = { microphone: $('micStatus'), camera: $('cameraStatus'), screen: $('screenStatus') };
   const testStatus = { microphone: $('statusMicrophone'), camera: $('statusCamera'), screen: $('statusScreen') };
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+  const quickGlass = $('quickGlass');
 
   let state = initialState();
   let panel = 'none';
@@ -19,6 +20,8 @@
   let toastTimer = null;
   let captionTimer = null;
   let petStateTimer = null;
+  let transientPetState = null;
+  let draggingPet = false;
   let modelBusy = false;
   let requestGeneration = 0;
   let turnCount = 0;
@@ -57,6 +60,7 @@
   let screenAnalysisPaused = false;
   let screenAnalysisRequestSequence = 0;
   let activeScreenAnalysisRequestId = null;
+  let quickGlassConfigured = false;
 
   const settings = {
     activeLevel: 'balanced',
@@ -69,6 +73,51 @@
   function nowMs() { return Date.now() + fakeClockOffsetMs; }
   function sessionActive() { return state.phase !== PHASES.IDLE; }
   function clamp(value, min, max) { return Math.min(max, Math.max(min, value)); }
+
+  function createQuickGlassWallpaper() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 656;
+    canvas.height = 160;
+    const context = canvas.getContext('2d', { alpha: false });
+    context.scale(2, 2);
+    context.fillStyle = '#edf4f8';
+    context.fillRect(0, 0, 328, 80);
+    context.save();
+    context.translate(-24, 0);
+    context.rotate(-.11);
+    context.filter = 'blur(14px)';
+    for (const band of [
+      { x: 0, width: 92, color: 'rgba(88, 180, 232, .34)' },
+      { x: 96, width: 82, color: 'rgba(255, 255, 255, .76)' },
+      { x: 182, width: 74, color: 'rgba(238, 191, 127, .24)' },
+      { x: 264, width: 94, color: 'rgba(235, 151, 174, .2)' }
+    ]) {
+      context.fillStyle = band.color;
+      context.fillRect(band.x, -36, band.width, 160);
+    }
+    context.restore();
+    context.fillStyle = 'rgba(255, 255, 255, .32)';
+    context.fillRect(0, 0, 328, 1);
+    return canvas.toDataURL('image/png');
+  }
+
+  function syncQuickGlass() {
+    if (reducedMotion.matches) {
+      document.body.dataset.liquidGlass = 'reduced';
+      return;
+    }
+    if (!quickGlass || typeof quickGlass.setTabs !== 'function' || typeof quickGlass.setState !== 'function') {
+      document.body.dataset.liquidGlass = 'unavailable';
+      return;
+    }
+    if (!quickGlass.hasAttribute('wallpaper')) quickGlass.setAttribute('wallpaper', createQuickGlassWallpaper());
+    if (!quickGlassConfigured) {
+      quickGlass.setTabs([[{ icon: '', label: '' }]]);
+      quickGlass.setState({ selectedTab: 0 });
+      quickGlassConfigured = true;
+    }
+    document.body.dataset.liquidGlass = 'ready';
+  }
 
   function modelName(source, degraded = false) {
     if (source === 'remote') return modelCapabilities.serviceFake ? '测试模型服务' : api.runtime.modelLabel;
@@ -341,11 +390,28 @@
     captionTimer = setTimeout(() => { $('caption').dataset.show = 'false'; }, duration);
   }
 
+  function resolvePetState() {
+    if (draggingPet) return 'drag';
+    if (transientPetState) return transientPetState;
+    if (panel === 'nudge' || state.phase === PHASES.NUDGE) return 'nudge';
+    if (modelBusy || realtimeStarting) return 'thinking';
+    if (settings.dnd) return 'dnd';
+    if (sessionActive()) return 'listening';
+    return 'idle';
+  }
+
+  function syncPetState() {
+    document.body.dataset.petState = resolvePetState();
+  }
+
   function setPetState(value, duration = 0) {
     clearTimeout(petStateTimer);
-    document.body.dataset.petState = value;
+    transientPetState = value === 'idle' ? null : value;
+    syncPetState();
     if (duration > 0) petStateTimer = setTimeout(() => {
-      document.body.dataset.petState = panel === 'nudge' ? 'nudge' : 'idle';
+      petStateTimer = null;
+      transientPetState = null;
+      syncPetState();
     }, duration);
   }
 
@@ -382,6 +448,8 @@
       surface.dataset.open = String(open);
       surface.setAttribute('aria-hidden', String(!open));
     }
+    $('settingsButton').setAttribute('aria-expanded', String(panel === 'settings'));
+    syncPetState();
     if (next !== 'none') api.window.focus();
     if (next === 'settings') void loadSources();
     if (next === 'settings' || next === 'assist') void refreshModelCapabilities();
@@ -411,6 +479,7 @@
   function render() {
     document.body.dataset.phase = state.phase;
     document.body.dataset.dnd = String(settings.dnd);
+    syncPetState();
     $('petStatus').dataset.state = state.phase;
     $('statusText').textContent = statusText();
     $('sensorBadge').textContent = String(streams.size);
@@ -418,10 +487,12 @@
     $('sensorBadge').setAttribute('aria-label', `${streams.size} 项输入`);
 
     const active = sessionActive();
-    $('sessionButton').querySelector('span').textContent = active ? '结束' : '开始';
-    $('sessionButton').querySelector('img').src = active ? 'icons/circle-stop.svg' : 'icons/play.svg';
+    $('sessionButton').querySelector('span').textContent = active ? '结束陪伴' : '开始陪伴';
+    $('sessionPlayIcon').hidden = active;
+    $('sessionStopIcon').hidden = !active;
     $('contextSession').querySelector('span').textContent = active ? '结束陪伴' : '开始陪伴';
-    $('contextSession').querySelector('img').src = active ? 'icons/circle-stop.svg' : 'icons/play.svg';
+    $('contextSessionPlayIcon').hidden = active;
+    $('contextSessionStopIcon').hidden = !active;
     $('simulateCue').disabled = !active || settings.activeLevel === 'quiet' || settings.dnd || settings.presentationMode || state.phase !== PHASES.ACTIVE;
     $('contextPause').disabled = streams.size === 0;
     const realtimeSupported = canUseRealtime();
@@ -454,7 +525,10 @@
     $('captionToggle').checked = settings.captions;
     document.querySelector(`input[name="activeLevel"][value="${settings.activeLevel}"]`).checked = true;
     $('dndButton').setAttribute('aria-pressed', String(settings.dnd));
+    const dndLabel = settings.dnd ? '关闭勿扰' : '开启勿扰';
+    $('dndButton').setAttribute('aria-label', dndLabel);
     $('contextDnd').querySelector('span').textContent = settings.dnd ? '解除勿扰' : '勿扰';
+    syncQuickGlass();
     api.app.updateState({ phase: state.phase, activeLevel: settings.activeLevel, dnd: settings.dnd, activeInputs: [...streams.keys()] });
   }
 
@@ -622,6 +696,7 @@
       try { state = transition(state, { type: 'SET_DND', value: settings.dnd }); } catch { /* UI setting persists */ }
     }
     if (settings.dnd) window.speechSynthesis?.cancel();
+    if (settings.dnd) setPetState('idle');
     if (settings.dnd && (realtimeActive || realtimeStarting)) void stopRealtime('dnd_enabled');
     if (settings.dnd) cancelScreenAnalysis();
     else scheduleScreenAnalysis();
@@ -999,12 +1074,14 @@
         addMessage('assistant', result.message, true, responseSource);
         showCaption(result.message);
         showToast(result.degraded ? '模型与离线回退均未返回结果' : '模型未返回结果');
+        setPetState('error', 1800);
       }
     } catch {
       if (requestId !== requestGeneration || state.phase !== PHASES.ENGAGED) return;
       setModelPresentation('fake', true);
       addMessage('assistant', '模型连接暂不可用，请稍后重试。', true, 'fallback');
       showToast('模型连接暂不可用');
+      setPetState('error', 1800);
     } finally {
       if (requestId === requestGeneration) {
         if (modelAbortController === controller) modelAbortController = null;
@@ -1198,6 +1275,7 @@
         realtimeErrorCode = String(error?.message || 'realtime_unavailable').slice(0, 80);
         realtimeStateText = '暂不可用';
         showToast('实时对话暂不可用');
+        setPetState('error', 1800);
         await api.realtime.stop('start_failed').catch(() => undefined);
         void refreshModelCapabilities(true);
       }
@@ -1264,7 +1342,7 @@
       return;
     }
     if (event.type === 'error') {
-      void stopRealtime(event.code || 'realtime_error', { message: '实时连接异常', notify: false });
+      void stopRealtime(event.code || 'realtime_error', { message: '实时连接异常', notify: false }).finally(() => setPetState('error', 1800));
       void refreshModelCapabilities(true);
       return;
     }
@@ -1275,7 +1353,7 @@
   function openContext(source) { setPanel('context', source); }
 
   $('sessionButton').addEventListener('click', toggleSession);
-  $('settingsButton').addEventListener('click', () => openSettings($('settingsButton')));
+  $('settingsButton').addEventListener('click', () => panel === 'settings' ? closePanel() : openSettings($('settingsButton')));
   $('dndButton').addEventListener('click', () => setDnd(!settings.dnd));
   $('simulateCue').addEventListener('click', simulateCueFlow);
   $('closeSettings').addEventListener('click', () => closePanel());
@@ -1322,8 +1400,12 @@
 
   document.addEventListener('keydown', () => { document.body.dataset.inputModality = 'keyboard'; }, true);
   document.addEventListener('pointerdown', () => { document.body.dataset.inputModality = 'pointer'; }, true);
+  reducedMotion.addEventListener('change', render);
 
   const pet = $('pet');
+  const petCharacter = $('pet-character');
+  const petTail = $('pet-tail');
+  const petPupils = [$('pet-pupil-left'), $('pet-pupil-right')];
   let drag = null;
   let moveFrame = 0;
   let pendingPoint = null;
@@ -1357,7 +1439,18 @@
     if (!drag || drag.pointerId !== event.pointerId) return;
     const dx = event.screenX - drag.startX;
     const dy = event.screenY - drag.startY;
-    if (Math.hypot(dx, dy) > 4) drag.moved = true;
+    if (Math.hypot(dx, dy) > 4 && !drag.moved) {
+      drag.moved = true;
+      draggingPet = true;
+      syncPetState();
+    }
+    if (drag.moved) {
+      const tilt = clamp(dx / 18, -6, 6);
+      petCharacter.style.transform = `rotate(${tilt}deg) scale(.98, 1.02)`;
+      petTail.style.transform = `rotate(${-tilt * 1.35}deg)`;
+      const eyeOffset = clamp(dx / 40, -3, 3);
+      petPupils.forEach((pupil) => { pupil.style.transform = `translateX(${eyeOffset}px)`; });
+    }
     drag.history.push({ x: event.screenX, y: event.screenY, t: performance.now() });
     drag.history = drag.history.filter((item) => performance.now() - item.t < 120).slice(-6);
     if (!drag.bounds) return;
@@ -1372,6 +1465,11 @@
     if (!drag || drag.pointerId !== event.pointerId) return;
     const finished = drag;
     drag = null;
+    draggingPet = false;
+    petCharacter.style.removeProperty('transform');
+    petTail.style.removeProperty('transform');
+    petPupils.forEach((pupil) => { pupil.style.removeProperty('transform'); });
+    syncPetState();
     if (moveFrame) cancelAnimationFrame(moveFrame);
     moveFrame = 0;
     const finalPoint = pendingPoint;
@@ -1385,8 +1483,8 @@
       api.window.endDrag((last.x - first.x) / seconds, (last.y - first.y) / seconds, reducedMotion.matches);
     } else if (!finished.moved) activatePet();
   }
-  pet.addEventListener('pointerup', endDrag);
-  pet.addEventListener('pointercancel', endDrag);
+  document.addEventListener('pointerup', endDrag, true);
+  document.addEventListener('pointercancel', endDrag, true);
   pet.addEventListener('click', (event) => event.preventDefault());
   pet.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activatePet(); }

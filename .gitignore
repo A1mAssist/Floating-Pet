@@ -5,7 +5,12 @@ __pycache__/
 /outputs/
 /handoff.md
 /docs/superpowers/plans/
+/.superpowers/
 desktop/release-preview.png
 desktop/release-realtime-preview.png
 desktop/release/
 desktop/dist/
+harmony-mock/.hvigor/
+harmony-mock/entry/build/
+harmony-mock/oh_modules/
+harmony-mock/entry/oh_modules/

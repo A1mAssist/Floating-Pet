@@ -32,6 +32,7 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
         `--user-data-dir=${userDataDir}`,
         '--fake-model',
         '--test-mode',
+        '--force-device-scale-factor=2',
         '--use-fake-device-for-media-stream',
         '--use-fake-ui-for-media-stream'
       ],
@@ -39,8 +40,81 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
     });
     const page = await app.firstWindow();
   const pageErrors = [];
+  const consoleErrors = [];
   page.on('pageerror', (error) => pageErrors.push(error.message));
+  page.on('console', (message) => { if (message.type() === 'error') consoleErrors.push(message.text()); });
   await page.waitForSelector('#pet');
+  await page.waitForFunction(() => document.body.dataset.liquidGlass === 'ready');
+  const liquidGlass = await page.evaluate(() => {
+    const element = document.querySelector('#quickGlass');
+    const canvas = element?.shadowRoot?.querySelector('canvas');
+    if (!canvas) return null;
+    const copy = document.createElement('canvas');
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    const context = copy.getContext('2d');
+    context.drawImage(canvas, 0, 0);
+    const pixels = context.getImageData(0, 0, copy.width, copy.height).data;
+    let nonTransparent = 0;
+    let min = 255;
+    let max = 0;
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 3] === 0) continue;
+      nonTransparent += 1;
+      const luminance = Math.round((pixels[i] * 299 + pixels[i + 1] * 587 + pixels[i + 2] * 114) / 1000);
+      min = Math.min(min, luminance);
+      max = Math.max(max, luminance);
+    }
+    return {
+      css: [element.clientWidth, element.clientHeight],
+      backing: [canvas.width, canvas.height],
+      dpr: window.devicePixelRatio,
+      configuredDpr: element.getAttribute('dpr'),
+      nonTransparent,
+      luminanceRange: max - min
+    };
+  });
+  assert.ok(liquidGlass, 'liquid glass canvas is missing');
+  assert.deepEqual(liquidGlass.css, [328, 80]);
+  assert.equal(liquidGlass.configuredDpr, '0');
+  assert.deepEqual(liquidGlass.backing, liquidGlass.css.map((size) => Math.round(size * liquidGlass.dpr)));
+  assert.ok(liquidGlass.nonTransparent > 1000, `liquid glass canvas is blank: ${JSON.stringify(liquidGlass)}`);
+  assert.ok(liquidGlass.luminanceRange > 20, `liquid glass canvas is flat: ${JSON.stringify(liquidGlass)}`);
+  assert.equal(await page.locator('#quickControls').getAttribute('role'), 'group');
+  assert.equal(await page.locator('#simulateCue').isHidden(), true);
+  assert.equal(await page.locator('#dndButton').getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.locator('#settingsButton').getAttribute('aria-expanded'), 'false');
+  const commandWidths = await page.evaluate(() => ['sessionButton', 'dndButton', 'settingsButton'].map((id) => document.getElementById(id).getBoundingClientRect().width));
+  assert.ok(commandWidths[0] > commandWidths[1] && commandWidths[1] === commandWidths[2], `invalid command hierarchy: ${commandWidths}`);
+  const petPartIds = ['pet-tail', 'pet-body', 'pet-head', 'pet-ear-left', 'pet-ear-right', 'pet-eye-left', 'pet-eye-right', 'pet-pupil-left', 'pet-pupil-right', 'pet-eyelids', 'pet-mouth-neutral', 'pet-mouth-talk', 'pet-mouth-worry', 'pet-paw', 'pet-sensor-core'];
+  await page.waitForFunction((ids) => ids.every((id) => {
+    const part = document.getElementById(id);
+    if (!part) return false;
+    const box = part.getBBox();
+    return box.width > 0 && box.height > 0;
+  }), petPartIds);
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'idle');
+  const statusLegibility = await page.evaluate(() => {
+    const rgba = (value) => value.match(/[\d.]+/g).map(Number);
+    const overBlack = ([red, green, blue, alpha = 1], opacity) => [red, green, blue].map((value) => value * alpha * opacity);
+    const luminance = (rgb) => rgb
+      .map((value) => value / 255)
+      .map((value) => value <= .04045 ? value / 12.92 : ((value + .055) / 1.055) ** 2.4)
+      .reduce((sum, value, index) => sum + value * [.2126, .7152, .0722][index], 0);
+    const contrast = (foreground, background) => {
+      const [lighter, darker] = [luminance(foreground), luminance(background)].sort((a, b) => b - a);
+      return (lighter + .05) / (darker + .05);
+    };
+    const status = document.querySelector('#petStatus');
+    const statusStyle = getComputedStyle(status);
+    const opacity = Number(statusStyle.opacity);
+    const background = overBlack(rgba(statusStyle.backgroundColor), opacity);
+    const ratio = (selector) => contrast(overBlack(rgba(getComputedStyle(document.querySelector(selector)).color), opacity), background);
+    return { text: ratio('#statusText'), badge: ratio('#modelBadge'), fontSize: getComputedStyle(status).fontSize };
+  });
+  assert.ok(statusLegibility.text >= 4.5, `low-contrast status text: ${JSON.stringify(statusLegibility)}`);
+  assert.ok(statusLegibility.badge >= 4.5, `low-contrast model badge: ${JSON.stringify(statusLegibility)}`);
+  assert.equal(statusLegibility.fontSize, '12px');
 
   await page.waitForFunction(() => window.pet.test.getShell().then((value) => value.alwaysOnTop), null, { timeout: 3000 });
   await page.waitForTimeout(200);
@@ -72,8 +146,10 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   await page.waitForTimeout(50);
   const duringDrag = await page.evaluate(() => window.pet.test.getBounds());
   assert.notDeepEqual({ x: duringDrag.x, y: duringDrag.y }, { x: beforeDrag.x, y: beforeDrag.y });
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'drag');
   await page.mouse.up();
   await page.waitForTimeout(40);
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'idle');
   const afterReducedSnap = await page.evaluate(() => window.pet.test.getBounds());
   await page.waitForTimeout(180);
   const stableReducedSnap = await page.evaluate(() => window.pet.test.getBounds());
@@ -106,13 +182,21 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   await page.focus('#pet');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'SESSION_ACTIVE');
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'listening');
   assert.equal((await page.locator('#caption').textContent()).length > 0, true);
+  const captionClearsStatus = await page.evaluate(() => {
+    const caption = document.querySelector('#caption').getBoundingClientRect();
+    const status = document.querySelector('#petStatus').getBoundingClientRect();
+    return caption.right <= status.left || caption.left >= status.right || caption.bottom <= status.top || caption.top >= status.bottom;
+  });
+  assert.equal(captionClearsStatus, true, 'caption overlaps the pet status');
   const keyboardDurations = await page.locator('#caption').evaluate((element) => getComputedStyle(element).transitionDuration.split(',').map((value) => value.trim()));
   assert.equal(keyboardDurations.every((value) => value === '0s'), true);
 
   await page.click('#pet', { button: 'right' });
   await page.click('#contextSettings');
   await page.waitForFunction(() => document.querySelector('#settingsPanel').dataset.open === 'true');
+  assert.equal(await page.locator('#settingsButton').getAttribute('aria-expanded'), 'true');
   await page.waitForFunction(() => document.querySelector('#screenSource').options.length > 1);
   assert.equal(await page.locator('#activeBalanced').isChecked(), true);
   await page.check('#activeQuiet');
@@ -155,11 +239,13 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   assert.equal(snapshot.activeInputs.includes('camera'), false);
   assert.equal(snapshot.activeInputs.includes('screen'), true);
   await page.click('#closeSettings');
+  assert.equal(await page.locator('#settingsButton').getAttribute('aria-expanded'), 'false');
 
   assert.equal(await page.evaluate(() => window.__floatingPetTest.emitCue()), false);
   await page.evaluate(() => window.__floatingPetTest.advanceClock(5100));
   assert.equal(await page.evaluate(() => window.__floatingPetTest.emitCue()), true);
   await page.waitForFunction(() => document.querySelector('#nudgeBubble').dataset.open === 'true');
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'nudge');
   await page.waitForFunction(() => document.activeElement?.id === 'acceptNudge');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
@@ -186,6 +272,7 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   await page.click('#sendMessage');
   await page.waitForSelector('.message.error');
   assert.equal((await page.locator('.message.error').textContent()).includes('暂不可用'), true);
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'error');
 
   const stopMs = await page.evaluate(() => window.__floatingPetTest.stopAllInputs());
   assert.ok(stopMs <= 1000, `capture stop took ${stopMs}ms`);
@@ -208,16 +295,36 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   assert.equal(await page.evaluate(() => window.__floatingPetTest.emitCue()), false);
   assert.equal(await page.locator('#nudgeBubble').getAttribute('data-open'), 'false');
   await page.click('#dndButton');
+  assert.equal(await page.locator('#dndButton').getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#dndButton').getAttribute('aria-label'), '关闭勿扰');
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'dnd');
+  assert.notEqual(await page.locator('#dndButton').evaluate((element) => getComputedStyle(element).backgroundColor), 'rgba(0, 0, 0, 0)');
   assert.equal(await page.evaluate(() => window.__floatingPetTest.emitCue()), false);
+  await page.click('#dndButton');
+  assert.equal(await page.locator('#dndButton').getAttribute('aria-pressed'), 'false');
+  assert.equal(await page.locator('#dndButton').getAttribute('aria-label'), '开启勿扰');
+  assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'listening');
 
   await page.evaluate(() => window.pet.test.setSize(390, 640));
   await page.waitForTimeout(100);
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
   assert.ok(overflow <= 1, `horizontal overflow: ${overflow}px`);
+  const compactLayout = await page.evaluate(() => {
+    const rail = document.querySelector('#quickControls').getBoundingClientRect();
+    const controls = ['sessionButton', 'dndButton', 'settingsButton'].map((id) => {
+      const element = document.getElementById(id);
+      const rect = element.getBoundingClientRect();
+      return { id, width: rect.width, height: rect.height, textFits: element.scrollWidth <= element.clientWidth && element.scrollHeight <= element.clientHeight };
+    });
+    return { viewportWidth: innerWidth, rail: { left: rail.left, right: rail.right }, controls };
+  });
+  assert.ok(compactLayout.rail.left >= 0 && compactLayout.rail.right <= compactLayout.viewportWidth, `command rail is clipped: ${JSON.stringify(compactLayout)}`);
+  assert.equal(compactLayout.controls.every(({ width, height, textFits }) => width >= 44 && height >= 44 && textFits), true, `invalid compact controls: ${JSON.stringify(compactLayout.controls)}`);
 
   const unnamed = await page.locator('button').evaluateAll((buttons) => buttons.filter((button) => !button.getAttribute('aria-label') && !button.textContent.trim()).length);
   assert.equal(unnamed, 0);
   assert.deepEqual(pageErrors, []);
+  assert.deepEqual(consoleErrors, []);
   } finally {
     await app?.close().catch(() => undefined);
     fs.rmSync(userDataDir, { recursive: true, force: true });
@@ -292,9 +399,9 @@ test('desktop pet completes the Fake realtime audio path', { timeout: 45000 }, a
       voice.dispatchEvent(new Event('change', { bubbles: true }));
     });
     await page.click('#closeSettings');
-    await page.click('#simulateCue');
+    await page.evaluate(() => document.querySelector('#simulateCue').click());
     await page.evaluate(() => window.__floatingPetTest.advanceClock(5100));
-    await page.click('#simulateCue');
+    await page.evaluate(() => document.querySelector('#simulateCue').click());
     await page.waitForFunction(() => document.querySelector('#nudgeBubble').dataset.open === 'true');
     await page.click('#acceptNudge');
     await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
@@ -594,7 +701,7 @@ test('desktop pet keeps unsupported chat media out of the remote request', { tim
     assert.equal(await page.locator('#modelLabel').textContent(), '测试模型服务');
     await page.click('#closeSettings');
 
-    await page.click('#simulateCue');
+    await page.evaluate(() => document.querySelector('#simulateCue').click());
     await page.waitForFunction(() => document.querySelector('#nudgeBubble').dataset.open === 'true', null, { timeout: 8000 });
     await page.click('#acceptNudge');
     await page.fill('#messageInput', '只测试文字');

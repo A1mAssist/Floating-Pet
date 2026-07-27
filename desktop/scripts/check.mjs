@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const scripts = [
   'src/main.cjs', 'src/preload.cjs', 'src/core.cjs', 'src/model-client.cjs', 'src/realtime-client.cjs',
-  'src/renderer/app.js', 'src/renderer/realtime-playback.js',
+  'src/renderer/app.js', 'src/renderer/realtime-playback.js', 'src/renderer/vendor/goose-liquid-glass.js',
   'tests/core.test.cjs', 'tests/model-client.test.cjs', 'tests/realtime-client.test.cjs',
   'tests/realtime-playback.test.cjs', 'tests/realtime-service.integration.test.cjs',
   'tests/e2e.cjs', 'tests/real-model.e2e.cjs', 'scripts/build.mjs', 'scripts/verify-package.mjs'
@@ -34,7 +34,9 @@ for (const relative of [
   'src/renderer/icons/video.svg',
   'src/renderer/icons/volume-2.svg',
   'src/renderer/icons/x.svg',
-  'src/renderer/icons/LUCIDE-LICENSE.txt'
+  'src/renderer/icons/LUCIDE-LICENSE.txt',
+  'src/renderer/vendor/GOOSE-HYPER-GLASS-LICENSE.txt',
+  'src/renderer/vendor/GOOSE-HYPER-GLASS-NOTICE.txt'
 ]) {
   await access(path.join(root, relative));
 }

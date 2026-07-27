@@ -81,7 +81,7 @@
     </section>
 
     <div id="contextMenu" class="surface context-menu interactive" data-open="false" role="menu" aria-hidden="true">
-      <button id="contextSession" type="button" role="menuitem"><img src="icons/play.svg" alt=""><span>开始陪伴</span></button>
+      <button id="contextSession" type="button" role="menuitem"><img id="contextSessionPlayIcon" src="icons/play.svg" alt=""><img id="contextSessionStopIcon" src="icons/circle-stop.svg" alt="" hidden><span>开始陪伴</span></button>
       <button id="contextPause" type="button" role="menuitem"><img src="icons/pause.svg" alt=""><span>暂停采集</span></button>
       <button id="contextDnd" type="button" role="menuitem"><img src="icons/moon.svg" alt=""><span>勿扰</span></button>
       <button id="contextSettings" data-testid="context-settings" type="button" role="menuitem"><img src="icons/settings.svg" alt=""><span>设置</span></button>
@@ -89,17 +89,43 @@
       <button id="contextExit" type="button" role="menuitem"><img src="icons/power.svg" alt=""><span>退出</span></button>
     </div>
 
-    <nav id="quickControls" class="quick-controls surface interactive" aria-label="快捷控制">
-      <button id="sessionButton" data-testid="start" class="button primary session-button" type="button"><img src="icons/play.svg" alt=""><span>开始</span></button>
-      <button id="simulateCue" data-testid="run-fake-cue" class="icon-button" type="button" aria-label="模拟重复错误" data-tooltip="模拟重复错误" disabled><img src="icons/sparkles.svg" alt=""></button>
-      <button id="dndButton" class="icon-button" type="button" aria-label="勿扰" aria-pressed="false" data-tooltip="勿扰"><img src="icons/moon.svg" alt=""></button>
-      <button id="settingsButton" class="icon-button" type="button" aria-label="设置" data-tooltip="设置"><img src="icons/settings.svg" alt=""></button>
-    </nav>
+    <div id="quickControls" class="quick-controls interactive" role="group" aria-label="快捷控制">
+      <liquid-glass id="quickGlass" class="quick-glass" mode="single-bottom-tabs" dpr="0" aria-hidden="true"></liquid-glass>
+      <button id="sessionButton" data-testid="start" class="button primary session-button" type="button"><img id="sessionPlayIcon" src="icons/play.svg" alt=""><img id="sessionStopIcon" src="icons/circle-stop.svg" alt="" hidden><span>开始陪伴</span></button>
+      <button id="dndButton" class="icon-button" type="button" aria-label="开启勿扰" aria-pressed="false"><img src="icons/moon.svg" alt=""></button>
+      <button id="settingsButton" class="icon-button" type="button" aria-label="设置" aria-controls="settingsPanel" aria-expanded="false"><img src="icons/settings.svg" alt=""></button>
+    </div>
+
+    <button id="simulateCue" data-testid="run-fake-cue" type="button" hidden disabled>模拟重复错误</button>
 
     <div id="petStatus" class="pet-status interactive" data-testid="status-session" data-state="IDLE_VISIBLE"><span class="status-light"></span><span id="statusText">感知关闭</span><span id="modelBadge" class="fake-badge">Model</span></div>
 
     <button id="pet" class="pet interactive" type="button" aria-label="Floating Pet 桌宠，拖动移动，单击互动">
-      <span class="pet-shadow"></span><img class="pet-art" src="pet.svg" alt=""><span class="speech-bars" aria-hidden="true"><i></i><i></i><i></i></span><span id="sensorBadge" class="sensor-badge" aria-label="0 项输入">0</span>
+      <span class="pet-shadow"></span>
+      <svg class="pet-art" viewBox="0 0 256 256" aria-hidden="true" focusable="false">
+        <g id="pet-character" class="pet-character">
+          <use id="pet-tail" class="pet-part" href="pet.svg#part-tail"></use>
+          <g id="pet-body-group" class="pet-body-group">
+            <use id="pet-body" class="pet-part" href="pet.svg#part-body"></use>
+            <use id="pet-paw" class="pet-part" href="pet.svg#part-paw"></use>
+            <use id="pet-sensor-core" class="pet-part pet-core" href="pet.svg#part-sensor-core"></use>
+          </g>
+          <use id="pet-ear-left" class="pet-part pet-ear" href="pet.svg#part-ear-left"></use>
+          <use id="pet-ear-right" class="pet-part pet-ear" href="pet.svg#part-ear-right"></use>
+          <g id="pet-head-group" class="pet-head-group">
+            <use id="pet-head" class="pet-part" href="pet.svg#part-head"></use>
+            <use id="pet-eye-left" class="pet-part" href="pet.svg#part-eye-left"></use>
+            <use id="pet-eye-right" class="pet-part" href="pet.svg#part-eye-right"></use>
+            <use id="pet-pupil-left" class="pet-part pet-pupil" href="pet.svg#part-pupil-left"></use>
+            <use id="pet-pupil-right" class="pet-part pet-pupil" href="pet.svg#part-pupil-right"></use>
+            <use id="pet-eyelids" class="pet-part pet-eyelids" href="pet.svg#part-eyelids"></use>
+            <use id="pet-mouth-neutral" class="pet-part pet-mouth" href="pet.svg#part-mouth-neutral"></use>
+            <use id="pet-mouth-talk" class="pet-part pet-mouth" href="pet.svg#part-mouth-talk"></use>
+            <use id="pet-mouth-worry" class="pet-part pet-mouth" href="pet.svg#part-mouth-worry"></use>
+          </g>
+        </g>
+      </svg>
+      <span id="sensorBadge" class="sensor-badge" aria-label="0 项输入">0</span>
     </button>
 
     <p id="caption" data-testid="caption" class="caption surface" role="status" aria-live="polite" aria-atomic="true"></p>
@@ -110,6 +136,7 @@
   </main>
   <script src="core.js"></script>
   <script src="realtime-playback.js"></script>
+  <script src="vendor/goose-liquid-glass.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

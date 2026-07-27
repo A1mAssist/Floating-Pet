@@ -1,14 +1,91 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc">
-  <title id="title">Floating Pet</title>
-  <desc id="desc">一只有绿色耳尖和珊瑚色鼻子的原创几何桌宠</desc>
-  <path fill="#172126" d="M183 179c26-3 40 9 40 27 0 19-18 30-42 25l5-17c12 3 20-1 20-8 0-7-7-11-21-9z"/>
-  <path fill="#d9e4e2" stroke="#172126" stroke-width="8" stroke-linejoin="round" d="M72 132c-23 11-31 32-26 57 5 26 28 42 67 42h30c39 0 62-16 67-42 5-25-3-46-26-57z"/>
-  <path fill="#f8fbfa" stroke="#172126" stroke-width="8" stroke-linejoin="round" d="M62 79 75 30l38 27c10-3 20-3 30 0l38-27 13 49c10 13 15 29 15 47 0 47-32 75-81 75s-81-28-81-75c0-18 5-34 15-47z"/>
-  <path fill="#19766b" d="m72 45 26 19-30 13zM184 45l-26 19 30 13z"/>
-  <ellipse cx="95" cy="121" rx="10" ry="15" fill="#172126"/><ellipse cx="161" cy="121" rx="10" ry="15" fill="#172126"/>
-  <circle cx="91" cy="116" r="3" fill="#fff"/><circle cx="157" cy="116" r="3" fill="#fff"/>
-  <path fill="#d66b54" d="M119 143c0-7 18-7 18 0 0 6-4 10-9 10s-9-4-9-10z"/>
-  <path fill="none" stroke="#172126" stroke-width="5" stroke-linecap="round" d="M128 152v8m0 0c-7 0-12-3-15-8m15 8c7 0 12-3 15-8"/>
-  <path fill="none" stroke="#fff" stroke-opacity=".72" stroke-width="7" stroke-linecap="round" d="M82 91c11-13 26-20 46-20"/>
-  <circle cx="177" cy="189" r="17" fill="#d0a33a" stroke="#172126" stroke-width="6"/><path fill="none" stroke="#172126" stroke-width="5" stroke-linecap="round" d="M177 180v10l7 4"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="title desc" color="#168c7d">
+  <title id="title">软瓷感知猫</title>
+  <desc id="desc">一只珍珠白、青绿耳朵、珊瑚鼻子的分层桌宠猫</desc>
+  <defs>
+    <g id="part-tail">
+      <path fill="#bdd2cc" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M176 166c31-15 55 1 54 25-1 26-25 42-53 28l6-18c16 8 29 2 30-10 1-11-11-16-29-8z"/>
+      <path fill="none" stroke="#f8fbfa" stroke-opacity=".7" stroke-width="5" stroke-linecap="round" d="M190 174c17-5 29 2 29 16"/>
+    </g>
+    <g id="part-body">
+      <path fill="#dce8e5" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M78 139c-20 17-25 48-13 70 12 23 37 31 64 31 31 0 55-6 67-29 12-23 6-55-17-72z"/>
+      <path fill="#f7faf9" d="M90 153c-15 14-17 40-7 56 10 17 29 21 51 21 22 0 40-4 51-18 7-11 7-27 2-39-13 18-32 27-57 27-20 0-33-16-40-47z"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".78" stroke-width="6" stroke-linecap="round" d="M91 158c-8 11-11 24-8 38"/>
+    </g>
+    <g id="part-ear-left">
+      <path fill="#f5f9f7" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M69 91c-8-15-13-40-7-61 1-5 6-6 10-3l41 31z"/>
+      <path fill="#198579" d="m70 42 27 20-25 15c-2-11-3-23-2-35z"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".66" stroke-width="4" stroke-linecap="round" d="M68 34c-1 9 0 19 2 28"/>
+    </g>
+    <g id="part-ear-right">
+      <path fill="#f5f9f7" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M187 91c8-15 13-40 7-61-1-5-6-6-10-3l-41 31z"/>
+      <path fill="#198579" d="m186 42-27 20 25 15c2-11 3-23 2-35z"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".66" stroke-width="4" stroke-linecap="round" d="M188 34c1 9 0 19-2 28"/>
+    </g>
+    <g id="part-head">
+      <path fill="#f7faf9" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M63 79c-9 13-13 30-13 48 0 39 29 62 78 62s78-23 78-62c0-18-4-35-13-48-13-20-37-31-65-31S76 59 63 79z"/>
+      <path fill="#fff" d="M72 82c12-18 33-27 58-27 18 0 33 4 45 12-40-2-68 13-86 48-7 15-10 31-8 48-16-10-23-23-23-39 0-16 4-31 14-42z" opacity=".8"/>
+      <path fill="#e9f1ef" d="M176 74c15 13 22 30 22 51 0 34-25 54-70 54 34-8 52-31 52-69 0-13-1-25-4-36z" opacity=".72"/>
+      <ellipse cx="83" cy="145" rx="13" ry="7" fill="#e87968" opacity=".16"/>
+      <ellipse cx="173" cy="145" rx="13" ry="7" fill="#e87968" opacity=".16"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".88" stroke-width="6" stroke-linecap="round" d="M76 87c10-15 27-23 49-25"/>
+    </g>
+    <g id="part-eye-left">
+      <ellipse cx="94" cy="119" rx="17" ry="22" fill="#fff" stroke="#17343a" stroke-width="4"/>
+    </g>
+    <g id="part-eye-right">
+      <ellipse cx="162" cy="119" rx="17" ry="22" fill="#fff" stroke="#17343a" stroke-width="4"/>
+    </g>
+    <g id="part-pupil-left">
+      <ellipse cx="97" cy="122" rx="9" ry="12" fill="#153239"/>
+      <circle cx="94" cy="117" r="3" fill="#fff"/>
+      <circle cx="101" cy="127" r="2" fill="#70b5aa" opacity=".72"/>
+    </g>
+    <g id="part-pupil-right">
+      <ellipse cx="159" cy="122" rx="9" ry="12" fill="#153239"/>
+      <circle cx="156" cy="117" r="3" fill="#fff"/>
+      <circle cx="163" cy="127" r="2" fill="#70b5aa" opacity=".72"/>
+    </g>
+    <g id="part-eyelids">
+      <path fill="#f7faf9" d="M74 116c4-17 13-24 21-24 11 0 19 8 21 24-8-7-14-9-21-9s-13 2-21 9z"/>
+      <path fill="#f7faf9" d="M140 116c4-17 13-24 21-24 11 0 19 8 21 24-8-7-14-9-21-9s-13 2-21 9z"/>
+      <path fill="none" stroke="#17343a" stroke-width="5" stroke-linecap="round" d="M79 119c9 8 20 8 30 0m38 0c9 8 20 8 30 0"/>
+    </g>
+    <g id="part-mouth-neutral">
+      <path fill="#df6b59" stroke="#17343a" stroke-width="3" stroke-linejoin="round" d="M119 146c0-7 18-7 18 0 0 6-4 9-9 9s-9-3-9-9z"/>
+      <path fill="none" stroke="#17343a" stroke-width="5" stroke-linecap="round" d="M128 155v6m0 0c-7 0-11-3-14-7m14 7c7 0 11-3 14-7"/>
+    </g>
+    <g id="part-mouth-talk">
+      <path fill="#df6b59" stroke="#17343a" stroke-width="3" stroke-linejoin="round" d="M119 145c0-7 18-7 18 0 0 6-4 9-9 9s-9-3-9-9z"/>
+      <ellipse cx="128" cy="166" rx="11" ry="9" fill="#17343a"/>
+      <path fill="#ed8a78" d="M121 169c4-3 10-3 14 0-1 4-4 6-7 6s-6-2-7-6z"/>
+    </g>
+    <g id="part-mouth-worry">
+      <path fill="#df6b59" stroke="#17343a" stroke-width="3" stroke-linejoin="round" d="M119 146c0-7 18-7 18 0 0 6-4 9-9 9s-9-3-9-9z"/>
+      <path fill="none" stroke="#17343a" stroke-width="5" stroke-linecap="round" d="M128 155v5m-14 8c8-8 20-8 28 0"/>
+    </g>
+    <g id="part-paw">
+      <path fill="#f7faf9" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M84 174c-13 1-21 13-18 25 3 11 15 16 27 10 9-5 13-15 8-24-3-7-9-11-17-11z"/>
+      <path fill="none" stroke="#bdd2cc" stroke-width="3" stroke-linecap="round" d="M78 196c6 4 12 4 18 0"/>
+    </g>
+    <g id="part-sensor-core">
+      <circle cx="166" cy="198" r="23" fill="#eef5f3" stroke="#17343a" stroke-width="6"/>
+      <circle cx="166" cy="198" r="11" fill="none" stroke="currentColor" stroke-width="5"/>
+      <circle cx="166" cy="198" r="4" fill="currentColor"/>
+      <circle cx="176" cy="187" r="3" fill="currentColor"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".78" stroke-width="3" stroke-linecap="round" d="M153 184c5-5 12-7 18-5"/>
+    </g>
+  </defs>
+
+  <use href="#part-tail"/>
+  <use href="#part-body"/>
+  <use href="#part-ear-left"/>
+  <use href="#part-ear-right"/>
+  <use href="#part-head"/>
+  <use href="#part-eye-left"/>
+  <use href="#part-eye-right"/>
+  <use href="#part-pupil-left"/>
+  <use href="#part-pupil-right"/>
+  <use href="#part-mouth-neutral"/>
+  <use href="#part-paw"/>
+  <use href="#part-sensor-core"/>
 </svg>
