@@ -10,7 +10,7 @@ desktop/release-preview.png
 desktop/release-realtime-preview.png
 desktop/release/
 desktop/dist/
-harmony-mock/.hvigor/
-harmony-mock/entry/build/
-harmony-mock/oh_modules/
-harmony-mock/entry/oh_modules/
+harmony/.hvigor/
+harmony/entry/build/
+harmony/oh_modules/
+harmony/entry/oh_modules/

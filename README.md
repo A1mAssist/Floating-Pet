@@ -5,6 +5,7 @@ Windows 桌面悬浮陪伴应用，使用 Electron 提供透明置顶界面，�
 ## 目录
 
 - `desktop/`：Electron 应用、测试与 Windows 打包配置
+- `harmony/`：HarmonyOS NEXT PC 产品工程（ArkWeb UI + ArkTS 原生能力桥接）
 - `service/`：FastAPI/Realtime 模型适配服务与 Ascend 启动脚本
 - `docs/`：产品设计和 Modelers Space 运维文档
 
@@ -25,6 +26,14 @@ npm run test:integration
 ```powershell
 Set-Location .\desktop
 npm run start:fake
+```
+
+HarmonyOS 工程使用 HarmonyOS 6.1.0 / API 23。同步当前 Renderer 并构建 HAP：
+
+```powershell
+node .\harmony\scripts\sync-renderer.mjs
+Set-Location .\harmony
+D:\Tools\command-line-tools\bin\hvigorw.bat --mode module -p product=default assembleHap --no-daemon
 ```
 
 Ascend 服务部署、Realtime 协议、真实模型验收和打包说明见 [desktop/README.md](desktop/README.md)。Modelers Space 的 FRP STCP 运维流程见 [docs/modelers-space-ssh-workflow.md](docs/modelers-space-ssh-workflow.md)。

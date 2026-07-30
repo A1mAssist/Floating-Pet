@@ -1,0 +1,12 @@
+GooseHyperGlassCDN 2.0
+https://github.com/Minecraftgoose/GooseHyperGlassCDN
+Upstream commit: b9e77b9727be0482e8458e0f25c5febcf8eaf7e7
+License: Apache-2.0 (see GOOSE-HYPER-GLASS-LICENSE.txt)
+
+Local build fixes:
+- Resolve renderer and catalog imports from the repository root.
+- Omit the catalog back button from single bottom-tab mode.
+- Expose the canvas as a shadow part instead of injecting inline styles, so the component works with a strict CSP.
+
+Bundled file SHA-256:
+55E652A7DCEC287F38EAB308C053E681387BA45B82C57D52CFC73389E896361D

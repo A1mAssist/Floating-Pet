@@ -1,0 +1,16 @@
+{
+  "string": [
+    {
+      "name": "module_desc",
+      "value": "浮伴 FloatPet HarmonyOS PC UI Mock"
+    },
+    {
+      "name": "EntryAbility_desc",
+      "value": "浮伴 FloatPet 桌面陪伴演示"
+    },
+    {
+      "name": "EntryAbility_label",
+      "value": "浮伴 FloatPet"
+    }
+  ]
+}

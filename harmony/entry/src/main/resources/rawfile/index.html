@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; media-src 'self' blob:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+  <title>浮伴 FloatPet</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body data-phase="IDLE_VISIBLE" data-pet-state="idle">
+  <svg class="svg-sprite" aria-hidden="true" focusable="false">
+    <defs>
+      <symbol id="icon-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+      <symbol id="icon-mic" viewBox="0 0 24 24"><path d="M12 19v3M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/></symbol>
+      <symbol id="icon-video" viewBox="0 0 24 24"><path d="m16 13 5.223 3.482a.5.5 0 0 0 .777-.416V7.87a.5.5 0 0 0-.752-.432L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></symbol>
+      <symbol id="icon-monitor-up" viewBox="0 0 24 24"><path d="m9 10 3-3 3 3M12 13V7"/><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M12 17v4M8 21h8"/></symbol>
+      <symbol id="icon-chevron-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+      <symbol id="icon-moon" viewBox="0 0 24 24"><path d="M20.985 12.486a9 9 0 1 1-9.473-9.472c.405-.022.617.46.402.803a6 6 0 0 0 8.268 8.268c.344-.215.825-.004.803.401"/></symbol>
+      <symbol id="icon-volume" viewBox="0 0 24 24"><path d="M11 4.702a.705.705 0 0 0-1.203-.498L6.413 7.587A1.4 1.4 0 0 1 5.416 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.416a1.4 1.4 0 0 1 .997.413l3.383 3.384A.705.705 0 0 0 11 19.298zM16 9a5 5 0 0 1 0 6M19.364 18.364a9 9 0 0 0 0-12.728"/></symbol>
+      <symbol id="icon-captions" viewBox="0 0 24 24"><rect width="18" height="14" x="3" y="5" rx="2"/><path d="M7 15h4M15 15h2M7 11h2M13 11h4"/></symbol>
+      <symbol id="icon-send" viewBox="0 0 24 24"><path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11zM21.854 2.147l-10.94 10.939"/></symbol>
+      <symbol id="icon-play" viewBox="0 0 24 24"><path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z"/></symbol>
+      <symbol id="icon-stop" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><rect x="9" y="9" width="6" height="6" rx="1"/></symbol>
+      <symbol id="icon-pause" viewBox="0 0 24 24"><rect x="14" y="3" width="5" height="18" rx="1"/><rect x="5" y="3" width="5" height="18" rx="1"/></symbol>
+      <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"/><circle cx="12" cy="12" r="3"/></symbol>
+      <symbol id="icon-power" viewBox="0 0 24 24"><path d="M12 2v10M18.4 6.6a9 9 0 1 1-12.77.04"/></symbol>
+    </defs>
+  </svg>
+  <main id="stage" aria-label="浮伴 FloatPet 桌面陪伴">
+    <section id="settingsPanel" class="surface settings-panel interactive" data-open="false" aria-labelledby="settingsTitle" aria-hidden="true">
+      <header class="surface-header">
+        <div><p class="eyebrow">控制中心</p><h1 id="settingsTitle">陪伴设置</h1></div>
+        <button id="closeSettings" class="icon-button" type="button" aria-label="关闭设置" data-tooltip="关闭"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+      </header>
+
+      <p id="modelPrivacy" class="privacy-note">输入默认关闭；仅在发送消息时，文字、当前视觉帧和短音频片段会提交给模型。</p>
+
+      <div class="setting-group" aria-labelledby="inputHeading">
+        <div class="group-heading"><h2 id="inputHeading">感知输入</h2><span id="sessionRequirement">需先开始陪伴</span></div>
+        <label class="setting-row" for="micToggle">
+          <span class="setting-label"><svg class="ui-icon" aria-hidden="true"><use href="#icon-mic"></use></svg><span>麦克风<small id="micStatus">已关闭</small></span></span>
+          <span class="switch"><input id="micToggle" data-testid="input-microphone" type="checkbox"><span></span></span>
+        </label>
+        <label class="setting-row" for="cameraToggle">
+          <span class="setting-label"><svg class="ui-icon" aria-hidden="true"><use href="#icon-video"></use></svg><span>摄像头<small id="cameraStatus">已关闭</small></span></span>
+          <span class="switch"><input id="cameraToggle" data-testid="input-camera" type="checkbox"><span></span></span>
+        </label>
+        <div class="setting-row screen-row">
+          <span class="setting-label"><svg class="ui-icon" aria-hidden="true"><use href="#icon-monitor-up"></use></svg><span>屏幕<small id="screenStatus">已关闭</small></span></span>
+          <label class="switch" for="screenToggle"><input id="screenToggle" data-testid="input-screen" type="checkbox" aria-label="启用屏幕"><span></span></label>
+          <label class="source-field" for="screenSource">
+            <span class="sr-only">选择屏幕来源</span>
+            <select id="screenSource" aria-label="屏幕来源"><option value="">选择窗口或屏幕</option></select>
+            <svg class="ui-icon" aria-hidden="true"><use href="#icon-chevron-down"></use></svg>
+          </label>
+        </div>
+        <video id="cameraPreview" class="camera-preview" autoplay muted playsinline hidden aria-label="摄像头预览"></video>
+      </div>
+
+      <div class="setting-group compact" aria-labelledby="behaviorHeading">
+        <h2 id="behaviorHeading">交互</h2>
+        <fieldset class="active-level">
+          <legend>主动程度</legend>
+          <div class="segmented-control">
+            <label><input id="activeQuiet" type="radio" name="activeLevel" value="quiet"><span>安静</span></label>
+            <label><input id="activeBalanced" type="radio" name="activeLevel" value="balanced" checked><span>平衡</span></label>
+            <label><input id="activeActive" type="radio" name="activeLevel" value="active"><span>主动</span></label>
+          </div>
+        </fieldset>
+        <label class="setting-row" for="dndToggle"><span class="setting-label"><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg><span>勿扰<small>不主动提示</small></span></span><span class="switch"><input id="dndToggle" type="checkbox"><span></span></span></label>
+        <label class="setting-row" for="presentationToggle"><span class="setting-label"><svg class="ui-icon" aria-hidden="true"><use href="#icon-monitor-up"></use></svg><span>演示模式<small>抑制气泡和语音</small></span></span><span class="switch"><input id="presentationToggle" type="checkbox"><span></span></span></label>
+        <label class="setting-row" for="voiceToggle"><span class="setting-label"><svg class="ui-icon" aria-hidden="true"><use href="#icon-volume"></use></svg><span>语音播放<small>模型语音或系统语音降级</small></span></span><span class="switch"><input id="voiceToggle" type="checkbox" checked><span></span></span></label>
+        <label class="setting-row" for="captionToggle"><span class="setting-label"><svg class="ui-icon" aria-hidden="true"><use href="#icon-captions"></use></svg><span>字幕<small>始终可用的文字降级</small></span></span><span class="switch"><input id="captionToggle" type="checkbox" checked><span></span></span></label>
+      </div>
+    </section>
+
+    <section id="assistCard" class="surface assist-card interactive" data-open="false" aria-labelledby="assistTitle" aria-hidden="true">
+      <header class="surface-header">
+        <div><p class="eyebrow"><span class="model-dot"></span><span id="modelLabel">模型 Adapter</span></p><h1 id="assistTitle">一起看看</h1></div>
+        <button id="closeAssist" class="icon-button" type="button" aria-label="收起协助卡" data-tooltip="收起"><svg class="ui-icon" aria-hidden="true"><use href="#icon-x"></use></svg></button>
+      </header>
+      <div class="realtime-bar">
+        <button id="realtimeToggle" class="button realtime-toggle" type="button" aria-pressed="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-volume"></use></svg><span>实时对话</span></button>
+        <span id="realtimeStatus" role="status" aria-live="polite">麦克风关闭</span>
+      </div>
+      <div id="conversation" class="conversation" aria-live="polite"></div>
+      <form id="messageForm" class="message-form">
+        <label class="sr-only" for="messageInput">输入消息</label>
+        <input id="messageInput" data-testid="text-input" maxlength="280" autocomplete="off" placeholder="继续问当前问题…">
+        <button id="sendMessage" class="icon-button primary" data-testid="send-text" type="submit" aria-label="发送" data-tooltip="发送"><svg class="ui-icon" aria-hidden="true"><use href="#icon-send"></use></svg></button>
+      </form>
+    </section>
+
+    <section id="nudgeBubble" class="surface nudge-bubble interactive" data-open="false" data-testid="nudge" aria-label="主动询问" aria-hidden="true">
+      <p class="eyebrow"><span class="model-dot"></span><span id="nudgeModelLabel">本地线索</span></p>
+      <p id="nudgeText">这个错误似乎重复出现，需要我一起看看吗？</p>
+      <div class="action-row"><button id="acceptNudge" data-testid="nudge-accept" class="button primary" type="button">一起看看</button><button id="dismissNudge" data-testid="nudge-decline" class="button quiet" type="button">不用</button></div>
+    </section>
+
+    <div id="contextMenu" class="surface context-menu interactive" data-open="false" role="menu" aria-hidden="true">
+      <button id="contextSession" type="button" role="menuitem"><svg id="contextSessionPlayIcon" class="ui-icon" aria-hidden="true"><use href="#icon-play"></use></svg><svg id="contextSessionStopIcon" class="ui-icon" aria-hidden="true" hidden><use href="#icon-stop"></use></svg><span>开始陪伴</span></button>
+      <button id="contextPause" type="button" role="menuitem"><svg class="ui-icon" aria-hidden="true"><use href="#icon-pause"></use></svg><span>暂停采集</span></button>
+      <button id="contextDnd" type="button" role="menuitem"><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg><span>勿扰</span></button>
+      <button id="contextSettings" data-testid="context-settings" type="button" role="menuitem"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg><span>设置</span></button>
+      <span class="menu-separator"></span>
+      <button id="contextExit" type="button" role="menuitem"><svg class="ui-icon" aria-hidden="true"><use href="#icon-power"></use></svg><span>退出</span></button>
+    </div>
+
+    <div id="quickControls" class="quick-controls interactive" role="group" aria-label="快捷控制">
+      <liquid-glass id="quickGlass" class="quick-glass" mode="single-bottom-tabs" dpr="0" aria-hidden="true"></liquid-glass>
+      <button id="sessionButton" data-testid="start" class="button primary session-button" type="button"><svg id="sessionPlayIcon" class="ui-icon" aria-hidden="true"><use href="#icon-play"></use></svg><svg id="sessionStopIcon" class="ui-icon" aria-hidden="true" hidden><use href="#icon-stop"></use></svg><span>开始陪伴</span></button>
+      <button id="dndButton" class="icon-button" type="button" aria-label="开启勿扰" aria-pressed="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-moon"></use></svg></button>
+      <button id="settingsButton" class="icon-button" type="button" aria-label="设置" aria-controls="settingsPanel" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-settings"></use></svg></button>
+    </div>
+
+    <button id="simulateCue" data-testid="run-fake-cue" type="button" hidden disabled>模拟重复错误</button>
+
+    <div id="petStatus" class="pet-status interactive" data-testid="status-session" data-state="IDLE_VISIBLE"><span class="status-light"></span><span id="statusText">感知关闭</span><span id="modelBadge" class="fake-badge">Model</span></div>
+
+    <button id="pet" class="pet interactive" type="button" aria-label="浮伴 FloatPet 桌宠，拖动移动，单击互动">
+      <span class="pet-shadow"></span>
+      <svg class="pet-art" viewBox="0 0 256 256" aria-hidden="true" focusable="false">
+        <defs>
+    <g id="part-tail">
+      <path fill="#bdd2cc" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M176 166c31-15 55 1 54 25-1 26-25 42-53 28l6-18c16 8 29 2 30-10 1-11-11-16-29-8z"/>
+      <path fill="none" stroke="#f8fbfa" stroke-opacity=".7" stroke-width="5" stroke-linecap="round" d="M190 174c17-5 29 2 29 16"/>
+    </g>
+    <g id="part-body">
+      <path fill="#dce8e5" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M78 139c-20 17-25 48-13 70 12 23 37 31 64 31 31 0 55-6 67-29 12-23 6-55-17-72z"/>
+      <path fill="#f7faf9" d="M90 153c-15 14-17 40-7 56 10 17 29 21 51 21 22 0 40-4 51-18 7-11 7-27 2-39-13 18-32 27-57 27-20 0-33-16-40-47z"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".78" stroke-width="6" stroke-linecap="round" d="M91 158c-8 11-11 24-8 38"/>
+    </g>
+    <g id="part-ear-left">
+      <path fill="#f5f9f7" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M69 91c-8-15-13-40-7-61 1-5 6-6 10-3l41 31z"/>
+      <path fill="#198579" d="m70 42 27 20-25 15c-2-11-3-23-2-35z"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".66" stroke-width="4" stroke-linecap="round" d="M68 34c-1 9 0 19 2 28"/>
+    </g>
+    <g id="part-ear-right">
+      <path fill="#f5f9f7" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M187 91c8-15 13-40 7-61-1-5-6-6-10-3l-41 31z"/>
+      <path fill="#198579" d="m186 42-27 20 25 15c2-11 3-23 2-35z"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".66" stroke-width="4" stroke-linecap="round" d="M188 34c1 9 0 19-2 28"/>
+    </g>
+    <g id="part-head">
+      <path fill="#f7faf9" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M63 79c-9 13-13 30-13 48 0 39 29 62 78 62s78-23 78-62c0-18-4-35-13-48-13-20-37-31-65-31S76 59 63 79z"/>
+      <path fill="#fff" d="M72 82c12-18 33-27 58-27 18 0 33 4 45 12-40-2-68 13-86 48-7 15-10 31-8 48-16-10-23-23-23-39 0-16 4-31 14-42z" opacity=".8"/>
+      <path fill="#e9f1ef" d="M176 74c15 13 22 30 22 51 0 34-25 54-70 54 34-8 52-31 52-69 0-13-1-25-4-36z" opacity=".72"/>
+      <ellipse cx="83" cy="145" rx="13" ry="7" fill="#e87968" opacity=".16"/>
+      <ellipse cx="173" cy="145" rx="13" ry="7" fill="#e87968" opacity=".16"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".88" stroke-width="6" stroke-linecap="round" d="M76 87c10-15 27-23 49-25"/>
+    </g>
+    <g id="part-eye-left">
+      <ellipse cx="94" cy="119" rx="17" ry="22" fill="#fff" stroke="#17343a" stroke-width="4"/>
+    </g>
+    <g id="part-eye-right">
+      <ellipse cx="162" cy="119" rx="17" ry="22" fill="#fff" stroke="#17343a" stroke-width="4"/>
+    </g>
+    <g id="part-pupil-left">
+      <ellipse cx="97" cy="122" rx="9" ry="12" fill="#153239"/>
+      <circle cx="94" cy="117" r="3" fill="#fff"/>
+      <circle cx="101" cy="127" r="2" fill="#70b5aa" opacity=".72"/>
+    </g>
+    <g id="part-pupil-right">
+      <ellipse cx="159" cy="122" rx="9" ry="12" fill="#153239"/>
+      <circle cx="156" cy="117" r="3" fill="#fff"/>
+      <circle cx="163" cy="127" r="2" fill="#70b5aa" opacity=".72"/>
+    </g>
+    <g id="part-eyelids">
+      <path fill="#f7faf9" d="M74 116c4-17 13-24 21-24 11 0 19 8 21 24-8-7-14-9-21-9s-13 2-21 9z"/>
+      <path fill="#f7faf9" d="M140 116c4-17 13-24 21-24 11 0 19 8 21 24-8-7-14-9-21-9s-13 2-21 9z"/>
+      <path fill="none" stroke="#17343a" stroke-width="5" stroke-linecap="round" d="M79 119c9 8 20 8 30 0m38 0c9 8 20 8 30 0"/>
+    </g>
+    <g id="part-mouth-neutral">
+      <path fill="#df6b59" stroke="#17343a" stroke-width="3" stroke-linejoin="round" d="M119 146c0-7 18-7 18 0 0 6-4 9-9 9s-9-3-9-9z"/>
+      <path fill="none" stroke="#17343a" stroke-width="5" stroke-linecap="round" d="M128 155v6m0 0c-7 0-11-3-14-7m14 7c7 0 11-3 14-7"/>
+    </g>
+    <g id="part-mouth-talk">
+      <path fill="#df6b59" stroke="#17343a" stroke-width="3" stroke-linejoin="round" d="M119 145c0-7 18-7 18 0 0 6-4 9-9 9s-9-3-9-9z"/>
+      <ellipse cx="128" cy="166" rx="11" ry="9" fill="#17343a"/>
+      <path fill="#ed8a78" d="M121 169c4-3 10-3 14 0-1 4-4 6-7 6s-6-2-7-6z"/>
+    </g>
+    <g id="part-mouth-worry">
+      <path fill="#df6b59" stroke="#17343a" stroke-width="3" stroke-linejoin="round" d="M119 146c0-7 18-7 18 0 0 6-4 9-9 9s-9-3-9-9z"/>
+      <path fill="none" stroke="#17343a" stroke-width="5" stroke-linecap="round" d="M128 155v5m-14 8c8-8 20-8 28 0"/>
+    </g>
+    <g id="part-paw">
+      <path fill="#f7faf9" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M84 174c-13 1-21 13-18 25 3 11 15 16 27 10 9-5 13-15 8-24-3-7-9-11-17-11z"/>
+      <path fill="none" stroke="#bdd2cc" stroke-width="3" stroke-linecap="round" d="M78 196c6 4 12 4 18 0"/>
+    </g>
+    <g id="part-sensor-core">
+      <circle cx="166" cy="198" r="23" fill="#eef5f3" stroke="#17343a" stroke-width="6"/>
+      <circle cx="166" cy="198" r="11" fill="none" stroke="currentColor" stroke-width="5"/>
+      <circle cx="166" cy="198" r="4" fill="currentColor"/>
+      <circle cx="176" cy="187" r="3" fill="currentColor"/>
+      <path fill="none" stroke="#fff" stroke-opacity=".78" stroke-width="3" stroke-linecap="round" d="M153 184c5-5 12-7 18-5"/>
+    </g>
+  </defs>
+        <g id="pet-character" class="pet-character">
+          <use id="pet-tail" class="pet-part" href="#part-tail"></use>
+          <g id="pet-body-group" class="pet-body-group">
+            <use id="pet-body" class="pet-part" href="#part-body"></use>
+            <use id="pet-paw" class="pet-part" href="#part-paw"></use>
+            <use id="pet-sensor-core" class="pet-part pet-core" href="#part-sensor-core"></use>
+          </g>
+          <use id="pet-ear-left" class="pet-part pet-ear" href="#part-ear-left"></use>
+          <use id="pet-ear-right" class="pet-part pet-ear" href="#part-ear-right"></use>
+          <g id="pet-head-group" class="pet-head-group">
+            <use id="pet-head" class="pet-part" href="#part-head"></use>
+            <use id="pet-eye-left" class="pet-part" href="#part-eye-left"></use>
+            <use id="pet-eye-right" class="pet-part" href="#part-eye-right"></use>
+            <use id="pet-pupil-left" class="pet-part pet-pupil" href="#part-pupil-left"></use>
+            <use id="pet-pupil-right" class="pet-part pet-pupil" href="#part-pupil-right"></use>
+            <use id="pet-eyelids" class="pet-part pet-eyelids" href="#part-eyelids"></use>
+            <use id="pet-mouth-neutral" class="pet-part pet-mouth" href="#part-mouth-neutral"></use>
+            <use id="pet-mouth-talk" class="pet-part pet-mouth" href="#part-mouth-talk"></use>
+            <use id="pet-mouth-worry" class="pet-part pet-mouth" href="#part-mouth-worry"></use>
+          </g>
+        </g>
+      </svg>
+      <span id="sensorBadge" class="sensor-badge" aria-label="0 项输入">0</span>
+    </button>
+
+    <p id="caption" data-testid="caption" class="caption surface" role="status" aria-live="polite" aria-atomic="true"></p>
+    <p id="toast" class="toast surface" role="status" aria-live="polite"></p>
+    <span id="statusMicrophone" data-testid="status-microphone" data-active="false" hidden></span>
+    <span id="statusCamera" data-testid="status-camera" data-active="false" hidden></span>
+    <span id="statusScreen" data-testid="status-screen" data-active="false" hidden></span>
+  </main>
+  <script src="harmony-bridge.js"></script>
+  <script src="core.js"></script>
+  <script src="realtime-playback.js"></script>
+  <script src="vendor/goose-liquid-glass.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
