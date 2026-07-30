@@ -30,6 +30,7 @@
   let sourceLoaded = false;
   let selectedSourceName = '';
   const streams = new Map();
+  const nativeScreenStream = Object.freeze({ nativeFrameSource: true });
   const inputGenerations = new Map(Object.keys(inputControls).map((kind) => [kind, 0]));
   const messages = [];
   const MAX_FRAME_DATA_URL_LENGTH = 'data:image/jpeg;base64,'.length + 4 * Math.floor((1024 * 1024) / 3);
@@ -247,7 +248,12 @@
   }
 
   function hasLiveScreen() {
-    return streams.get('screen')?.getVideoTracks().some((track) => track.readyState === 'live') === true;
+    return hasLiveVisual('screen', streams.get('screen'));
+  }
+
+  function hasLiveVisual(kind, stream) {
+    if (kind === 'screen' && stream?.nativeFrameSource === true) return true;
+    return stream?.getVideoTracks?.().some((track) => track.readyState === 'live') === true;
   }
 
   function canAnalyzeScreen() {
@@ -561,7 +567,7 @@
 
   function stopTracks(stream) {
     if (!stream) return;
-    for (const track of stream.getTracks()) track.stop();
+    for (const track of stream.getTracks?.() || []) track.stop();
   }
 
   function nextInputGeneration(kind) {
@@ -616,9 +622,11 @@
         const accepted = await api.capture.selectSource($('screenSource').value);
         if (!accepted) throw new Error('source_unavailable');
       }
-      const stream = kind === 'screen'
-        ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
-        : await navigator.mediaDevices.getUserMedia({ audio: kind === 'microphone', video: kind === 'camera' });
+      const stream = kind === 'screen' && api.capture.nativeFrames === true && typeof api.capture.frame === 'function'
+        ? nativeScreenStream
+        : kind === 'screen'
+          ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
+          : await navigator.mediaDevices.getUserMedia({ audio: kind === 'microphone', video: kind === 'camera' });
       if (generation !== inputGenerations.get(kind) || !sessionActive() || !inputControls[kind].checked) {
         stopTracks(stream);
         return;
@@ -626,7 +634,7 @@
       stopTracks(streams.get(kind));
       streams.set(kind, stream);
       state = transition(state, { type: 'INPUT_STARTED', kind });
-      for (const track of stream.getTracks()) track.addEventListener('ended', () => {
+      for (const track of stream.getTracks?.() || []) track.addEventListener('ended', () => {
         if (generation === inputGenerations.get(kind)) stopInput(kind);
       }, { once: true });
       if (kind === 'camera') {
@@ -883,6 +891,18 @@
   }
 
   async function captureFrame(kind, stream, signal = null) {
+    if (kind === 'screen' && stream?.nativeFrameSource === true) {
+      if (signal?.aborted) return null;
+      try {
+        const frame = await api.capture.frame();
+        if (signal?.aborted || typeof frame?.dataUrl !== 'string'
+            || !frame.dataUrl.startsWith('data:image/jpeg;base64,')
+            || frame.dataUrl.length > MAX_FRAME_DATA_URL_LENGTH) return null;
+        return { dataUrl: frame.dataUrl, source: 'screen' };
+      } catch {
+        return null;
+      }
+    }
     const temporary = kind !== 'camera';
     const video = temporary ? document.createElement('video') : $('cameraPreview');
     try {
@@ -919,7 +939,7 @@
     for (const kind of ['screen', 'camera']) {
       if (signal?.aborted) return null;
       const stream = streams.get(kind);
-      if (!stream?.getVideoTracks().some((track) => track.readyState === 'live')) continue;
+      if (!hasLiveVisual(kind, stream)) continue;
       const frame = await captureFrame(kind, stream, signal);
       if (frame) return frame;
     }

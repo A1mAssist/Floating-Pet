@@ -1,78 +1,135 @@
 (() => {
   'use strict';
 
-  const listeners = { command: new Set(), realtime: new Set(), shutdown: new Set() };
-  const subscribe = (set, handler) => {
-    if (typeof handler === 'function') set.add(handler);
-    return () => set.delete(handler);
-  };
-  const unavailableCapabilities = Object.freeze({
-    state: 'degraded',
-    mode: null,
-    chatCompletions: false,
-    imageInput: false,
-    chatAudioInput: false,
-    realtime: false,
-    audioInput: false,
-    video: false,
-    audioOutput: false,
-    serviceFake: false,
-    reason: 'harmony_native_bridge_pending'
+  const MAX_PROXY_PAYLOAD_CHARS = 6 * 1024 * 1024;
+  const MAX_PROXY_RESULT_CHARS = 8 * 1024 * 1024;
+  const listeners = Object.freeze({
+    command: new Set(),
+    realtime: new Set(),
+    shutdown: new Set()
   });
 
-  function localFallback(request) {
-    const messages = Array.isArray(request?.messages) ? request.messages : [];
-    const content = String(messages.at(-1)?.content || '').slice(0, 4000);
-    const turn = Number.isSafeInteger(request?.turn) ? request.turn : 0;
-    const result = window.FloatingPetCore?.fakeReply(content, turn)
-      || { ok: false, code: 'capability_missing', message: '本机回应暂不可用。' };
-    return {
-      ...result,
-      source: 'fake',
-      degraded: true,
-      reason: 'capability_missing',
-      remoteAttempted: false,
-      visualUsed: false,
-      audioUsed: false
-    };
+  class NativeBridgeError extends Error {
+    constructor(code, message) {
+      super(message);
+      this.name = 'NativeBridgeError';
+      this.code = code;
+    }
   }
 
-  window.pet = Object.freeze({
-    runtime: Object.freeze({ fakeModel: false, modelLabel: 'HarmonyOS MiniCPM-o', testMode: false }),
+  function subscribe(channel, handler) {
+    if (typeof handler !== 'function') return () => undefined;
+    listeners[channel].add(handler);
+    return () => listeners[channel].delete(handler);
+  }
+
+  async function invoke(method, payload = {}) {
+    const proxy = globalThis.FloatPetNative;
+    if (!proxy || typeof proxy.invoke !== 'function') {
+      throw new NativeBridgeError('bridge_unavailable', '系统能力桥接未就绪。');
+    }
+    const payloadJson = JSON.stringify(payload ?? {});
+    if (typeof payloadJson !== 'string' || payloadJson.length > MAX_PROXY_PAYLOAD_CHARS) {
+      throw new NativeBridgeError('invalid_input', '请求数据无效。');
+    }
+
+    let raw;
+    try {
+      raw = await proxy.invoke(method, payloadJson);
+    } catch {
+      throw new NativeBridgeError('bridge_error', '系统能力调用失败。');
+    }
+    if (typeof raw !== 'string' || raw.length > MAX_PROXY_RESULT_CHARS) {
+      throw new NativeBridgeError('invalid_response', '系统能力返回无效。');
+    }
+
+    let envelope;
+    try {
+      envelope = JSON.parse(raw);
+    } catch {
+      throw new NativeBridgeError('invalid_response', '系统能力返回无效。');
+    }
+    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) {
+      throw new NativeBridgeError('invalid_response', '系统能力返回无效。');
+    }
+    if (envelope.ok === true && Object.hasOwn(envelope, 'value')) return envelope.value;
+    const code = typeof envelope.error?.code === 'string' && /^[a-z0-9_-]{1,64}$/i.test(envelope.error.code)
+      ? envelope.error.code
+      : 'native_error';
+    const message = typeof envelope.error?.message === 'string' && envelope.error.message.length <= 512
+      ? envelope.error.message
+      : '系统能力暂不可用。';
+    throw new NativeBridgeError(code, message);
+  }
+
+  function fire(method, payload = {}) {
+    void invoke(method, payload).catch((error) => {
+      console.error(`[FloatPet] NATIVE_CALL_FAILED method=${method} code=${String(error?.code || 'native_error')}`);
+    });
+  }
+
+  function receiveNativeEvent(channel, value) {
+    if (!Object.hasOwn(listeners, channel)) return false;
+    for (const handler of [...listeners[channel]]) {
+      try { handler(value); } catch { /* subscriber failures are isolated */ }
+    }
+    return true;
+  }
+
+  Object.defineProperty(globalThis, '__floatPetNativeEvent', {
+    value: receiveNativeEvent,
+    configurable: false,
+    enumerable: false,
+    writable: false
+  });
+
+  const api = {
+    runtime: Object.freeze({ fakeModel: false, modelLabel: 'Ascend MiniCPM-o', testMode: false }),
     window: Object.freeze({
-      beginDrag: async () => null,
-      moveDrag() {},
-      endDrag() {},
-      setClickThrough() {},
-      focus() {}
+      beginDrag: () => invoke('window.beginDrag'),
+      moveDrag: (x, y) => fire('window.moveDrag', { x, y }),
+      endDrag: (x, y, reducedMotion) => fire('window.endDrag', { x, y, reducedMotion: Boolean(reducedMotion) }),
+      setClickThrough(ignored) {
+        void invoke('window.setClickThrough', { ignored: Boolean(ignored) }).catch((error) => {
+          if (error?.code !== 'unsupported') {
+            console.error(`[FloatPet] NATIVE_CALL_FAILED method=window.setClickThrough code=${String(error?.code || 'native_error')}`);
+          }
+        });
+      },
+      focus: () => fire('window.focus')
     }),
     capture: Object.freeze({
-      listSources: async () => [],
-      selectSource: async () => false,
-      onShutdown: (handler) => subscribe(listeners.shutdown, handler)
+      nativeFrames: true,
+      listSources: () => invoke('capture.listSources'),
+      selectSource: (id) => invoke('capture.selectSource', { id }),
+      frame: () => invoke('capture.frame'),
+      onShutdown: (handler) => subscribe('shutdown', handler)
     }),
     model: Object.freeze({
-      capabilities: async () => ({ ...unavailableCapabilities }),
-      analyzeScreen: async () => ({ ok: false, code: 'capability_missing' }),
-      cancelScreenAnalysis() {},
-      chat: async (request) => localFallback(request)
+      capabilities: () => invoke('model.capabilities'),
+      analyzeScreen: (request) => invoke('model.analyzeScreen', request),
+      cancelScreenAnalysis: (requestId) => fire('model.cancelScreenAnalysis', { requestId }),
+      chat: (request) => invoke('model.chat', request)
     }),
     realtime: Object.freeze({
-      start: async () => ({ ok: false, code: 'capability_missing', message: '实时桥接暂不可用。' }),
-      append: async () => ({ ok: false, code: 'capability_missing' }),
-      stop: async () => ({ ok: true }),
-      onEvent: (handler) => subscribe(listeners.realtime, handler)
+      start: (request) => invoke('realtime.start', request),
+      append: (input) => invoke('realtime.append', input),
+      stop: (reason) => invoke('realtime.stop', { reason }),
+      onEvent: (handler) => subscribe('realtime', handler)
     }),
     app: Object.freeze({
-      onCommand: (handler) => subscribe(listeners.command, handler),
-      updateState() {},
-      rendererReady(report) {
-        console.info(`[FloatPet] RENDERER_READY phase=${String(report?.phase || '')}`);
-      },
-      quit() {
-        console.info('[FloatPet] QUIT_REQUESTED');
-      }
+      onCommand: (handler) => subscribe('command', handler),
+      updateState: (snapshot) => fire('app.updateState', snapshot),
+      rendererReady: (report) => fire('app.rendererReady', report),
+      quit: () => fire('app.quit')
     })
+  };
+
+  Object.defineProperty(globalThis, 'pet', {
+    value: Object.freeze(api),
+    configurable: false,
+    enumerable: true,
+    writable: false
   });
 
   console.info('[FloatPet] HARMONY_BRIDGE_READY');
