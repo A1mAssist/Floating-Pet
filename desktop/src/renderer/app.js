@@ -1,13 +1,31 @@
 (() => {
   'use strict';
 
-  const { PHASES, initialState, transition, decideNudge } = window.FloatingPetCore;
+  const { PHASES, initialState, transition, decideNudge, nudgePrompt } = window.FloatingPetCore;
   const api = window.pet;
   const $ = (id) => document.getElementById(id);
   const inputNames = { microphone: '麦克风', camera: '摄像头', screen: '屏幕' };
   const inputControls = { microphone: $('micToggle'), camera: $('cameraToggle'), screen: $('screenToggle') };
   const inputStatus = { microphone: $('micStatus'), camera: $('cameraStatus'), screen: $('screenStatus') };
   const testStatus = { microphone: $('statusMicrophone'), camera: $('statusCamera'), screen: $('statusScreen') };
+  const connectionStates = new Set(['idle', 'starting', 'forwarding', 'probing', 'ready', 'credentials_missing', 'ssh_unavailable', 'connection_refused', 'connection_reset', 'remote_start_failed', 'health_timeout', 'mode_mismatch', 'stopped']);
+  const connectionFailures = new Set(['credentials_missing', 'ssh_unavailable', 'connection_refused', 'connection_reset', 'remote_start_failed', 'health_timeout', 'mode_mismatch', 'stopped']);
+  const connectionPending = new Set(['starting', 'forwarding', 'probing']);
+  const connectionLabels = Object.freeze({
+    idle: '未连接',
+    starting: '正在连接',
+    forwarding: '正在建立转发',
+    probing: '正在检查服务',
+    ready: '已连接',
+    credentials_missing: '缺少凭据',
+    ssh_unavailable: 'SSH 不可用',
+    connection_refused: '连接被拒绝',
+    connection_reset: '连接已重置',
+    remote_start_failed: '远端服务未启动',
+    health_timeout: '健康检查超时',
+    mode_mismatch: '服务模式不匹配',
+    stopped: '已停止'
+  });
   const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
   const quickGlass = $('quickGlass');
 
@@ -21,6 +39,7 @@
   let toastTimer = null;
   let captionTimer = null;
   let petStateTimer = null;
+  let speechGeneration = 0;
   let transientPetState = null;
   let draggingPet = false;
   let modelBusy = false;
@@ -63,11 +82,16 @@
   let screenAnalysisRequestSequence = 0;
   let activeScreenAnalysisRequestId = null;
   let quickGlassConfigured = false;
+  let persistedSettings = null;
+  let connectionState = { state: 'idle', code: null, health: null };
+  let settingsOperation = Promise.resolve();
+  let initialized = false;
 
   const settings = {
     activeLevel: 'balanced',
     voice: !api.runtime.testMode,
     captions: true,
+    openAtLogin: false,
     dnd: false,
     presentationMode: false
   };
@@ -127,6 +151,157 @@
     if (source === 'fake' && degraded) return '离线回退';
     if (source === 'fake') return 'Fake Adapter';
     return '本地线索';
+  }
+
+  function normalizeConnectionState(value) {
+    return {
+      state: connectionStates.has(value?.state) ? value.state : 'idle',
+      code: typeof value?.code === 'string' ? value.code : null,
+      health: value?.health && typeof value.health === 'object' ? value.health : null
+    };
+  }
+
+  function activeProfile() {
+    const id = persistedSettings?.activeProfileId;
+    const profile = id && persistedSettings?.profiles?.[id];
+    return profile && typeof profile === 'object' ? profile : null;
+  }
+
+  function applyPersistedSettings(value) {
+    const next = value?.settings && value.ok !== false ? value.settings : value;
+    if (!next || typeof next !== 'object' || !next.preferences || typeof next.preferences !== 'object') return false;
+    persistedSettings = next;
+    if (['quiet', 'balanced', 'active'].includes(next.preferences.activeLevel)) settings.activeLevel = next.preferences.activeLevel;
+    if (typeof next.preferences.voice === 'boolean') settings.voice = next.preferences.voice;
+    if (typeof next.preferences.captions === 'boolean') settings.captions = next.preferences.captions;
+    if (typeof next.preferences.openAtLogin === 'boolean') settings.openAtLogin = next.preferences.openAtLogin;
+    return true;
+  }
+
+  function connectionLabel() {
+    if (api.runtime.fakeModel) return 'Fake Adapter';
+    return connectionLabels[connectionState.state] || '未连接';
+  }
+
+  function renderConnectionSettings() {
+    const select = $('profileSelect');
+    if (!select) return;
+    const profiles = Object.values(persistedSettings?.profiles || {});
+    const activeId = persistedSettings?.activeProfileId || '';
+    const signature = `${activeId}|${profiles.map((profile) => `${profile.id}:${profile.label}:${profile.transport}`).join('|')}`;
+    if (select.dataset.signature !== signature) {
+      select.replaceChildren(new Option('默认环境配置', ''));
+      for (const profile of profiles) {
+        select.append(new Option(`${profile.label} · ${profile.transport === 'ssh' ? 'SSH' : '直连'}`, profile.id));
+      }
+      select.dataset.signature = signature;
+    }
+    select.value = activeId;
+    const profile = activeProfile();
+    const sshProfile = profile?.transport === 'ssh';
+    const status = $('connectionStatus');
+    status.textContent = connectionLabel();
+    status.dataset.state = connectionState.state === 'ready' ? 'ready' : connectionFailures.has(connectionState.state) && !api.runtime.fakeModel ? 'error' : '';
+    $('reconnectModel').disabled = api.runtime.fakeModel || connectionPending.has(connectionState.state);
+    $('selectCredentials').disabled = !sshProfile;
+    $('remoteRootInput').disabled = !sshProfile;
+    if (document.activeElement !== $('remoteRootInput')) $('remoteRootInput').value = sshProfile ? (profile.remoteRoot || '') : '';
+    $('profileTransport').textContent = profile
+      ? `${profile.transport === 'ssh' ? 'SSH 转发' : 'HTTP/WSS 直连'} · ${profile.model || 'cpmo'}`
+      : '使用默认环境配置';
+    $('credentialPath').textContent = sshProfile
+      ? profile.credentialDir ? `凭据目录：${profile.credentialDir}` : '未选择凭据目录'
+      : profile ? '直连配置不需要凭据目录' : '默认环境配置不需要凭据目录';
+    $('connectionHint').textContent = profile?.transport === 'ssh'
+      ? 'SSH 和可选 FRP 只在本机运行；远端服务不会因桌宠退出而停止。'
+      : profile?.transport === 'direct'
+        ? '当前使用直接 HTTP/WSS 连接；连接失败时保留本机离线回应。'
+        : '模型服务不可用时，文字仍可使用本机离线回应。';
+  }
+
+  function enqueueSettingsOperation(task) {
+    const run = settingsOperation.catch(() => {}).then(task).catch(() => {
+      applyPersistedSettings(persistedSettings);
+      showToast('设置同步失败');
+      render();
+      return { ok: false, code: 'ipc_error' };
+    });
+    settingsOperation = run;
+    return run;
+  }
+
+  function showSettingsError(result) {
+    const messages = {
+      invalid_profile: '连接配置无效',
+      credentials_missing: '凭据目录不完整',
+      save_failed: '设置保存失败',
+      profile_limit: '连接配置已达上限'
+    };
+    showToast(messages[result?.code] || '设置未保存');
+  }
+
+  function persistPreferences() {
+    const preferences = {
+      activeLevel: settings.activeLevel,
+      voice: settings.voice,
+      captions: settings.captions,
+      openAtLogin: settings.openAtLogin
+    };
+    return enqueueSettingsOperation(async () => {
+      const result = await api.settings.update({ preferences });
+      if (result?.ok && applyPersistedSettings(result.settings)) render();
+      else if (result?.ok === false) {
+        applyPersistedSettings(persistedSettings);
+        showSettingsError(result);
+        render();
+      }
+      return result;
+    });
+  }
+
+  function updateActiveProfile(patch) {
+    const profile = activeProfile();
+    if (!profile) return Promise.resolve({ ok: false, code: 'invalid_profile' });
+    return enqueueSettingsOperation(async () => {
+      const result = await api.settings.update({ profile: { ...profile, ...patch } });
+      if (result?.ok && applyPersistedSettings(result.settings)) {
+        render();
+        void refreshModelCapabilities(true);
+      } else if (result?.ok === false) {
+        showSettingsError(result);
+        render();
+      }
+      return result;
+    });
+  }
+
+  async function chooseCredentials() {
+    if (activeProfile()?.transport !== 'ssh') return;
+    try {
+      const result = await api.model.selectCredentials();
+      if (result?.ok && result.credentialDir) {
+        await updateActiveProfile({ credentialDir: result.credentialDir });
+      } else if (result?.code && result.code !== 'cancelled') {
+        showSettingsError(result);
+      }
+    } catch {
+      showToast('凭据目录未更新');
+    }
+  }
+
+  async function reconnectModel() {
+    if (api.runtime.fakeModel) return showToast('Fake Adapter 无需连接');
+    connectionState = { state: 'starting', code: null, health: null };
+    render();
+    try {
+      const result = await api.model.connect();
+      connectionState = normalizeConnectionState(result);
+      render();
+      await refreshModelCapabilities(true);
+    } catch {
+      connectionState = { state: 'connection_refused', code: 'ipc_error', health: null };
+      render();
+    }
   }
 
   function setModelPresentation(source, degraded = false, remoteAttempted = true) {
@@ -422,15 +597,29 @@
     }, duration);
   }
 
+  function cancelSpeech() {
+    speechGeneration += 1;
+    window.speechSynthesis?.cancel();
+  }
+
   function speak(text) {
+    const generation = ++speechGeneration;
     showCaption(text);
     if (!settings.voice || settings.dnd || settings.presentationMode || !sessionActive() || !('speechSynthesis' in window)) return;
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'zh-CN';
-    utterance.onstart = () => setPetState('speaking');
-    utterance.onend = () => setPetState(panel === 'nudge' ? 'nudge' : 'idle');
-    utterance.onerror = () => setPetState('idle');
+    utterance.onstart = () => {
+      if (generation !== speechGeneration || (transientPetState && transientPetState !== 'speaking')) return;
+      setPetState('speaking');
+    };
+    utterance.onend = () => {
+      if (generation !== speechGeneration || transientPetState !== 'speaking') return;
+      setPetState(panel === 'nudge' ? 'nudge' : 'idle');
+    };
+    utterance.onerror = () => {
+      if (generation === speechGeneration && transientPetState === 'speaking') setPetState('idle');
+    };
     window.speechSynthesis.speak(utterance);
   }
 
@@ -530,11 +719,13 @@
     $('presentationToggle').checked = settings.presentationMode;
     $('voiceToggle').checked = settings.voice;
     $('captionToggle').checked = settings.captions;
+    $('openAtLoginToggle').checked = settings.openAtLogin;
     document.querySelector(`input[name="activeLevel"][value="${settings.activeLevel}"]`).checked = true;
     $('dndButton').setAttribute('aria-pressed', String(settings.dnd));
     const dndLabel = settings.dnd ? '关闭勿扰' : '开启勿扰';
     $('dndButton').setAttribute('aria-label', dndLabel);
     $('contextDnd').querySelector('span').textContent = settings.dnd ? '解除勿扰' : '勿扰';
+    renderConnectionSettings();
     syncQuickGlass();
     api.app.updateState({ phase: state.phase, activeLevel: settings.activeLevel, dnd: settings.dnd, activeInputs: [...streams.keys()] });
   }
@@ -668,7 +859,8 @@
     invalidateModelRequest();
     $('conversation').replaceChildren();
     $('messageInput').value = '';
-    window.speechSynthesis?.cancel();
+    clearObservationNote();
+    cancelSpeech();
     showCaption('');
     closePanel({ restore: false });
     setPetState('idle');
@@ -705,7 +897,7 @@
     if (sessionActive() && state.phase !== PHASES.NUDGE && state.phase !== PHASES.PENDING) {
       try { state = transition(state, { type: 'SET_DND', value: settings.dnd }); } catch { /* UI setting persists */ }
     }
-    if (settings.dnd) window.speechSynthesis?.cancel();
+    if (settings.dnd) cancelSpeech();
     if (settings.dnd) setPetState('idle');
     if (settings.dnd && (realtimeActive || realtimeStarting)) void stopRealtime('dnd_enabled');
     if (settings.dnd) cancelScreenAnalysis();
@@ -722,7 +914,7 @@
     if (sessionActive() && state.phase !== PHASES.NUDGE && state.phase !== PHASES.PENDING) {
       try { state = transition(state, { type: 'SET_PRESENTATION', value: settings.presentationMode }); } catch { /* UI setting persists */ }
     }
-    if (settings.presentationMode) window.speechSynthesis?.cancel();
+    if (settings.presentationMode) cancelSpeech();
     if (settings.presentationMode && (realtimeActive || realtimeStarting)) void stopRealtime('presentation_enabled');
     if (settings.presentationMode) cancelScreenAnalysis();
     else scheduleScreenAnalysis();
@@ -734,6 +926,7 @@
     settings.activeLevel = value;
     observations = [];
     cancelScreenAnalysis({ pause: value === 'quiet' });
+    void persistPreferences();
     if (value === 'quiet' && state.phase === PHASES.NUDGE) dismissNudge();
     else {
       scheduleScreenAnalysis();
@@ -772,9 +965,7 @@
     state = transition(state, { type: 'CUES_READY', eventKey: decision.eventKey });
     state = transition(state, { type: 'SHOW_NUDGE' });
     cancelScreenAnalysis({ clearObservations: false });
-    const prompt = observation.kind === 'repeated_attempt'
-      ? '这个操作似乎重复了几次，需要我一起看看吗？'
-      : '这个错误似乎重复出现，需要我一起看看吗？';
+    const prompt = nudgePrompt(matched?.kind);
     $('nudgeText').textContent = prompt;
     setPanel('nudge', pet);
     setPetState('nudge', 280);
@@ -815,15 +1006,20 @@
     return { record, row };
   }
 
+  function clearObservationNote() {
+    $('observationNote').hidden = true;
+    $('observationNoteText').textContent = '';
+  }
+
   function acceptNudge() {
     if (state.phase !== PHASES.NUDGE) return;
     state = transition(state, { type: 'ACCEPT' });
     setPanel('assist', pet);
     $('conversation').replaceChildren();
     messages.length = 0;
-    const prompt = latestObservationSummary
-      ? `我注意到：${latestObservationSummary}。你想从哪里开始看？`
-      : '我看到一个重复线索，可以一起看看。';
+    const prompt = '我看到一个重复线索，可以一起看看。';
+    $('observationNoteText').textContent = latestObservationSummary || '';
+    $('observationNote').hidden = !latestObservationSummary;
     addMessage('assistant', prompt, false, 'local');
     speak(prompt);
     render();
@@ -843,6 +1039,7 @@
     void stopRealtime('card_closed');
     invalidateModelRequest();
     if (state.phase === PHASES.ENGAGED) state = transition(state, { type: 'FINISH', atMs: nowMs() });
+    clearObservationNote();
     closePanel();
     setPetState('idle');
     render();
@@ -1381,7 +1578,10 @@
     if (event.type === 'closed') void stopRealtime(event.reason || 'closed', { notify: false });
   }
 
-  function openSettings(source) { setPanel('settings', source); }
+  function openSettings(source) {
+    if (state.phase === PHASES.NUDGE) dismissNudge();
+    setPanel('settings', source);
+  }
   function openContext(source) { setPanel('context', source); }
 
   $('sessionButton').addEventListener('click', toggleSession);
@@ -1402,12 +1602,14 @@
   $('voiceToggle').addEventListener('change', (event) => {
     settings.voice = event.target.checked;
     if (!settings.voice) {
-      window.speechSynthesis?.cancel();
+      cancelSpeech();
       realtimePlayback?.clear();
     }
+    void persistPreferences();
     render();
   });
-  $('captionToggle').addEventListener('change', (event) => { settings.captions = event.target.checked; if (!settings.captions) showCaption(''); render(); });
+  $('captionToggle').addEventListener('change', (event) => { settings.captions = event.target.checked; if (!settings.captions) showCaption(''); void persistPreferences(); render(); });
+  $('openAtLoginToggle').addEventListener('change', (event) => { settings.openAtLogin = event.target.checked; void persistPreferences(); render(); });
   for (const control of document.querySelectorAll('input[name="activeLevel"]')) control.addEventListener('change', (event) => setActiveLevel(event.target.value));
   for (const [kind, control] of Object.entries(inputControls)) control.addEventListener('change', (event) => void setInput(kind, event.target.checked));
   $('screenSource').addEventListener('change', (event) => {
@@ -1415,6 +1617,27 @@
     if (streams.has('screen')) stopInput('screen');
     render();
   });
+  $('profileSelect').addEventListener('change', (event) => {
+    const id = event.target.value;
+    void enqueueSettingsOperation(async () => {
+      const result = await api.model.selectProfile(id);
+      if (result?.ok && applyPersistedSettings(result.settings)) {
+        connectionState = normalizeConnectionState(await api.model.connectionState());
+        render();
+        void refreshModelCapabilities(true);
+      } else if (result?.ok === false) {
+        showSettingsError(result);
+        render();
+      }
+      return result;
+    });
+  });
+  $('remoteRootInput').addEventListener('change', (event) => {
+    const value = event.target.value.trim();
+    void updateActiveProfile({ remoteRoot: value || null });
+  });
+  $('selectCredentials').addEventListener('click', () => { void chooseCredentials(); });
+  $('reconnectModel').addEventListener('click', () => { void reconnectModel(); });
 
   $('contextSession').addEventListener('click', () => { closePanel({ restore: false }); toggleSession(); });
   $('contextPause').addEventListener('click', () => { closePanel({ restore: false }); stopAllInputs(); showToast('采集已暂停'); });
@@ -1446,7 +1669,9 @@
     api.window.focus();
     if (!sessionActive()) startSession();
     if (state.phase === PHASES.ACTIVE || state.phase === PHASES.COOLDOWN) {
+      cancelScreenAnalysis({ clearObservations: false });
       state = transition(state, { type: 'ENGAGE' });
+      clearObservationNote();
       setPanel('assist', pet);
       render();
       return;
@@ -1554,6 +1779,26 @@
   window.addEventListener('pagehide', () => { cancelCapabilityRetry(); stopAllInputs(); });
   window.addEventListener('beforeunload', () => { cancelCapabilityRetry(); stopAllInputs(); });
 
+  function handleConnectionState(value) {
+    const previous = connectionState.state;
+    connectionState = normalizeConnectionState(value);
+    if (!initialized) return;
+    render();
+    if (!api.runtime.fakeModel && previous !== connectionState.state
+        && (connectionState.state === 'ready' || connectionState.state === 'idle' || connectionFailures.has(connectionState.state))) {
+      void refreshModelCapabilities(true);
+    }
+  }
+
+  async function hydrateSettings() {
+    const [settingsResult, connectionResult] = await Promise.allSettled([
+      api.settings.get(),
+      api.model.connectionState()
+    ]);
+    if (settingsResult.status === 'fulfilled' && settingsResult.value?.ok) applyPersistedSettings(settingsResult.value.settings);
+    if (connectionResult.status === 'fulfilled') connectionState = normalizeConnectionState(connectionResult.value);
+  }
+
   if (api.runtime.testMode) {
     document.body.dataset.testMode = 'true';
     Object.defineProperty(window, '__floatingPetTest', {
@@ -1572,8 +1817,15 @@
     });
   }
 
-  applyCapabilityPresentation();
-  render();
-  void refreshModelCapabilities(true);
-  api.app.rendererReady({ mediaCallsBeforeStart: mediaCalls, activeInputs: [...streams.keys()], phase: state.phase });
+  async function initialize() {
+    if (typeof api.model.onConnectionState === 'function') api.model.onConnectionState(handleConnectionState);
+    await hydrateSettings();
+    initialized = true;
+    applyCapabilityPresentation();
+    render();
+    void refreshModelCapabilities(true);
+    api.app.rendererReady({ mediaCallsBeforeStart: mediaCalls, activeInputs: [...streams.keys()], phase: state.phase });
+  }
+
+  void initialize();
 })();

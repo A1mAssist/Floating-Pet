@@ -233,6 +233,18 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   padding: 9px 3px 5px;
 }
 .group-heading span { color: var(--muted); font-size: 11px; }
+.connection-group { padding-bottom: 4px; }
+.connection-group .group-heading span[data-state="ready"] { color: var(--green-strong); }
+.connection-group .group-heading span[data-state="error"] { color: var(--danger); }
+.profile-field { margin: 0 0 10px; }
+.connection-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px 0; }
+.connection-actions .button { min-height: 38px; height: 38px; padding: 0 12px; font-size: 12px; }
+.field-row { display: flex; min-height: 66px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(42, 58, 64, .1); cursor: text; }
+.field-row .setting-label { flex: 1 1 auto; }
+.field-control { width: min(52%, 210px); min-width: 0; height: 38px; border: 1px solid rgba(255, 255, 255, .62); border-radius: 14px; background: var(--recessed); box-shadow: var(--shadow-pressed); padding: 0 11px; font-size: 12px; user-select: text; }
+.field-control:disabled { cursor: default; opacity: .48; }
+.setting-hint { margin: 8px 3px 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; user-select: text; }
+.setting-hint + .setting-hint { margin-top: 3px; }
 
 .active-level { margin: 5px 0 10px; padding: 0; border: 0; }
 .active-level legend { margin-bottom: 7px; color: var(--muted); font-size: 11px; }
@@ -370,6 +382,9 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .realtime-toggle[aria-pressed="true"] { border-color: rgba(255, 255, 255, .5); background: var(--green); box-shadow: 0 9px 19px rgba(17, 111, 101, .26), inset 0 1px 1px rgba(255, 255, 255, .4), inset 0 -1px 1px rgba(7, 70, 63, .3); color: #fff; }
 .realtime-toggle[aria-pressed="true"] img { filter: brightness(0) invert(1); }
 #realtimeStatus { color: var(--muted); font-size: 11px; line-height: 1.3; text-align: right; }
+.observation-note { display: flex; flex: 0 0 auto; flex-direction: column; gap: 4px; margin: 0 0 4px; padding: 9px 11px; border: 1px solid rgba(185, 120, 0, .2); border-radius: 14px; background: rgba(255, 246, 214, .38); color: #524b40; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; user-select: text; }
+.observation-note small { color: var(--gold); font-size: 10px; font-weight: 720; }
+.observation-note[hidden] { display: none; }
 .nudge-bubble::after {
   content: "";
   position: absolute;
@@ -812,6 +827,8 @@ body[data-input-modality="keyboard"] .pet:active .pet-art {
   .nudge-bubble { left: 12px; right: 92px; }
   .pet { right: 20px; bottom: 80px; }
   .pet-status { right: 27px; }
+  .connection-actions .button { flex: 1 1 0; min-width: 0; padding: 0 8px; }
+  .field-control { width: 48%; }
 }
 
 @media (prefers-reduced-motion: reduce) {

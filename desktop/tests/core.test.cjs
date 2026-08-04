@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { PHASES, initialState, transition, decideNudge, fakeReply } = require('../src/core.cjs');
+const { PHASES, initialState, transition, decideNudge, nudgePrompt, fakeReply } = require('../src/core.cjs');
 
 test('session reducer follows the visible product loop', () => {
   let state = initialState();
@@ -106,6 +106,11 @@ test('camera-only observations cannot drive proactive policy', () => {
     ]
   });
   assert.equal(decision.action, 'suppress');
+});
+
+test('nudge wording follows the matched observation kind', () => {
+  assert.equal(nudgePrompt('repeated_attempt'), '这个操作似乎重复了几次，需要我一起看看吗？');
+  assert.equal(nudgePrompt('repeated_error'), '这个错误似乎重复出现，需要我一起看看吗？');
 });
 
 test('fake adapter has deterministic success and truthful failure', () => {

@@ -192,6 +192,16 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   assert.equal(captionClearsStatus, true, 'caption overlaps the pet status');
   const keyboardDurations = await page.locator('#caption').evaluate((element) => getComputedStyle(element).transitionDuration.split(',').map((value) => value.trim()));
   assert.equal(keyboardDurations.every((value) => value === '0s'), true);
+  await page.click('#pet');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
+  assert.equal(await page.locator('#assistCard').getAttribute('data-open'), 'true');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'COOLDOWN');
+  await page.click('#pet');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'COOLDOWN');
+  await page.evaluate(() => window.__floatingPetTest.advanceClock(120001));
   await page.focus('#sessionButton');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'IDLE_VISIBLE');
@@ -261,7 +271,9 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   await page.waitForFunction(() => document.activeElement?.id === 'acceptNudge');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
-  assert.equal((await page.locator('#conversation').textContent()).includes('同一个错误重复出现'), true);
+  assert.equal(await page.locator('#observationNote').isHidden(), false);
+  assert.equal(await page.locator('#observationNoteText').textContent(), '同一个错误重复出现');
+  assert.equal((await page.locator('#conversation').textContent()).includes('同一个错误重复出现'), false);
   await page.fill('#messageInput', '这个错误为什么重复出现');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelectorAll('.message.assistant').length >= 2);
@@ -341,6 +353,143 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   assert.equal(unnamed, 0);
   assert.deepEqual(pageErrors, []);
   assert.deepEqual(consoleErrors, []);
+  } finally {
+    await app?.close().catch(() => undefined);
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
+test('desktop pet restores only safe settings after relaunch', { timeout: 60000 }, async () => {
+  let app;
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'floating-pet-settings-e2e-'));
+  const configPath = path.join(userDataDir, 'config.json');
+  const launch = () => electron.launch({
+    executablePath: require('electron'),
+    args: [
+      root,
+      `--user-data-dir=${userDataDir}`,
+      '--fake-model',
+      '--test-mode',
+      '--use-fake-device-for-media-stream',
+      '--use-fake-ui-for-media-stream'
+    ],
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
+  });
+  const directProfile = (id, label, port) => ({
+    id,
+    label,
+    transport: 'direct',
+    desiredMode: 'chat',
+    httpBase: `http://127.0.0.1:${port}`,
+    realtimeUrl: `ws://127.0.0.1:${port}/v1/realtime`,
+    model: 'cpmo'
+  });
+  const sshProfile = {
+    id: 'ssh-b',
+    label: 'SSH B',
+    transport: 'ssh',
+    desiredMode: 'chat',
+    httpBase: 'http://127.0.0.1:18001',
+    realtimeUrl: 'ws://127.0.0.1:18001/v1/realtime',
+    model: 'cpmo',
+    credentialDir: userDataDir,
+    sshConfig: 'ssh_config',
+    sshTarget: 'tester@example.com',
+    localPort: 18001,
+    remoteHost: '127.0.0.1',
+    remotePort: 8000,
+    remoteRoot: '/workspace/project'
+  };
+  try {
+    fs.writeFileSync(configPath, JSON.stringify({
+      version: 1,
+      window: { x: null, y: null },
+      preferences: { activeLevel: 'balanced', voice: true, captions: true, openAtLogin: false },
+      activeProfileId: 'direct-a',
+      profiles: {
+        'direct-a': directProfile('direct-a', '直连 A', 18000),
+        'ssh-b': sshProfile
+      }
+    }), 'utf8');
+
+    app = await launch();
+    let page = await app.firstWindow();
+    await page.waitForSelector('#pet');
+    await page.evaluate(() => window.__floatingPetTest.openSettings());
+    await page.waitForFunction(() => document.querySelector('#profileSelect').value === 'direct-a');
+    assert.equal(await page.locator('#connectionStatus').textContent(), 'Fake Adapter');
+    assert.equal(await page.locator('#remoteRootInput').isDisabled(), true);
+    assert.equal(await page.locator('#selectCredentials').isDisabled(), true);
+
+    await page.selectOption('#profileSelect', 'ssh-b');
+    await page.waitForFunction(() => document.querySelector('#remoteRootInput').disabled === false);
+    assert.equal(await page.locator('#selectCredentials').isDisabled(), false);
+    await page.fill('#remoteRootInput', '/workspace/next-project');
+    await page.locator('#remoteRootInput').blur();
+    await page.check('#activeActive');
+    await page.uncheck('#voiceToggle');
+    await page.uncheck('#captionToggle');
+    await page.check('#openAtLoginToggle');
+    await page.waitForFunction(async () => {
+      const result = await window.pet.settings.get();
+      return result?.ok
+        && result.settings.activeProfileId === 'ssh-b'
+        && result.settings.profiles['ssh-b'].remoteRoot === '/workspace/next-project'
+        && result.settings.preferences.activeLevel === 'active'
+        && result.settings.preferences.voice === false
+        && result.settings.preferences.captions === false
+        && result.settings.preferences.openAtLogin === true;
+    });
+
+    await page.click('#closeSettings');
+    await page.focus('#sessionButton');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'SESSION_ACTIVE');
+    await page.evaluate(() => window.__floatingPetTest.openSettings());
+    await page.click('label[for="micToggle"]');
+    await page.waitForFunction(() => window.__floatingPetTest.getState().activeInputs.includes('microphone'));
+    await page.check('#dndToggle');
+    await page.check('#presentationToggle');
+    await page.click('#closeSettings');
+    await page.click('#pet');
+    await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
+    assert.equal(await page.locator('#messageInput').isDisabled(), false);
+
+    await app.close();
+    app = null;
+    const stored = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    stored.window = { x: 999999, y: -999999 };
+    fs.writeFileSync(configPath, JSON.stringify(stored), 'utf8');
+
+    app = await launch();
+    page = await app.firstWindow();
+    await page.waitForSelector('#pet');
+    await page.waitForFunction(() => window.__floatingPetTest.getState().activeLevel === 'active');
+    await page.evaluate(() => window.__floatingPetTest.openSettings());
+    assert.equal(await page.locator('#profileSelect').inputValue(), 'ssh-b');
+    assert.equal(await page.locator('#remoteRootInput').inputValue(), '/workspace/next-project');
+    assert.equal(await page.locator('#activeActive').isChecked(), true);
+    assert.equal(await page.locator('#voiceToggle').isChecked(), false);
+    assert.equal(await page.locator('#captionToggle').isChecked(), false);
+    assert.equal(await page.locator('#openAtLoginToggle').isChecked(), true);
+    assert.equal(await page.locator('#dndToggle').isChecked(), false);
+    assert.equal(await page.locator('#presentationToggle').isChecked(), false);
+    assert.equal(await page.locator('#micToggle').isChecked(), false);
+    assert.equal(await page.locator('#cameraToggle').isChecked(), false);
+    assert.equal(await page.locator('#screenToggle').isChecked(), false);
+    assert.deepEqual((await page.evaluate(() => window.__floatingPetTest.getState())).activeInputs, []);
+    assert.equal((await page.evaluate(() => window.__floatingPetTest.getState())).phase, 'IDLE_VISIBLE');
+
+    const geometry = await app.evaluate(({ BrowserWindow, screen }) => ({
+      bounds: BrowserWindow.getAllWindows()[0].getBounds(),
+      workAreas: screen.getAllDisplays().map((display) => display.workArea)
+    }));
+    assert.equal(geometry.workAreas.some((work) => (
+      geometry.bounds.x >= work.x
+      && geometry.bounds.y >= work.y
+      && geometry.bounds.x + geometry.bounds.width <= work.x + work.width
+      && geometry.bounds.y + geometry.bounds.height <= work.y + work.height
+    )), true, `restored window is outside every display: ${JSON.stringify(geometry)}`);
   } finally {
     await app?.close().catch(() => undefined);
     fs.rmSync(userDataDir, { recursive: true, force: true });
@@ -607,16 +756,25 @@ test('desktop pet turns two remote screen observations into one proactive nudge'
     await page.waitForFunction(() => document.querySelector('#modelLabel').textContent === '测试模型服务');
     assert.equal((await page.locator('#modelPrivacy').textContent()).includes('本机 Fake Adapter'), false);
 
-    await page.click('#settingsButton');
-    await page.click('label[for="screenToggle"]');
-    await page.waitForFunction(() => document.querySelector('#screenStatus').textContent === '已关闭');
+    await page.click('#pet');
+    await page.waitForFunction(() => document.body.dataset.phase === 'ENGAGED');
     await Promise.race([
       firstRequestClosed,
-      new Promise((_, reject) => setTimeout(() => reject(new Error('screen analysis request was not cancelled')), 3000))
+      new Promise((_, reject) => setTimeout(() => reject(new Error('direct engagement did not cancel screen analysis')), 3000))
     ]);
+    await page.click('#closeAssist');
+    await page.waitForFunction(() => document.body.dataset.phase === 'COOLDOWN');
+    await page.focus('#sessionButton');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.body.dataset.phase === 'IDLE_VISIBLE');
+    await page.focus('#sessionButton');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.body.dataset.phase === 'SESSION_ACTIVE');
     await page.waitForTimeout(5500);
     assert.equal(requests.length, 1);
 
+    await page.click('#pet', { button: 'right' });
+    await page.click('#contextSettings');
     await page.click('label[for="screenToggle"]');
     await page.waitForFunction(() => document.querySelector('#screenStatus').textContent !== '已关闭', null, { timeout: 8000 });
     await page.click('#closeSettings');
@@ -632,7 +790,13 @@ test('desktop pet turns two remote screen observations into one proactive nudge'
     assert.equal(await page.locator('#nudgeText').textContent(), '这个错误似乎重复出现，需要我一起看看吗？');
     await page.click('#acceptNudge');
     await page.waitForFunction(() => document.body.dataset.phase === 'ENGAGED');
-    assert.equal((await page.locator('#conversation').textContent()).includes('同一个本地测试错误重复出现'), true);
+    assert.equal(await page.locator('#observationNoteText').textContent(), '同一个本地测试错误重复出现');
+    assert.equal((await page.locator('#conversation').textContent()).includes('同一个本地测试错误重复出现'), false);
+    await page.fill('#messageInput', '请帮我看看');
+    await page.click('#sendMessage');
+    await page.waitForFunction(() => document.querySelectorAll('.message.assistant').length >= 2, null, { timeout: 8000 });
+    assert.equal(requests.length, 5);
+    assert.equal(JSON.stringify(requests.at(-1)).includes('同一个本地测试错误重复出现'), false);
     assert.deepEqual(pageErrors, []);
   } finally {
     await app?.close().catch(() => undefined);

@@ -18,6 +18,25 @@
 
       <p id="modelPrivacy" class="privacy-note">输入默认关闭；仅在发送消息时，文字、当前视觉帧和短音频片段会提交给模型。</p>
 
+      <div class="setting-group connection-group" aria-labelledby="connectionHeading">
+        <div class="group-heading"><h2 id="connectionHeading">模型连接</h2><span id="connectionStatus" role="status" aria-live="polite">未连接</span></div>
+        <label class="source-field profile-field" for="profileSelect">
+          <span class="sr-only">选择模型连接配置</span>
+          <select id="profileSelect" aria-label="模型连接配置"><option value="">默认环境配置</option></select>
+          <img src="icons/chevron-down.svg" alt="">
+        </label>
+        <div class="connection-actions">
+          <button id="reconnectModel" class="button quiet" type="button">重新连接</button>
+          <button id="selectCredentials" class="button quiet" type="button">选择凭据目录</button>
+        </div>
+        <label class="field-row" for="remoteRootInput">
+          <span class="setting-label"><img src="icons/monitor-up.svg" alt=""><span>远端目录<small id="profileTransport">使用默认环境配置</small></span></span>
+          <input id="remoteRootInput" class="field-control" type="text" maxlength="2048" placeholder="可选，例如 /workspace/project" autocomplete="off">
+        </label>
+        <p id="credentialPath" class="setting-hint">未选择凭据目录</p>
+        <p id="connectionHint" class="setting-hint">模型服务不可用时，文字仍可使用本机离线回应。</p>
+      </div>
+
       <div class="setting-group" aria-labelledby="inputHeading">
         <div class="group-heading"><h2 id="inputHeading">感知输入</h2><span id="sessionRequirement">需先开始陪伴</span></div>
         <label class="setting-row" for="micToggle">
@@ -54,6 +73,7 @@
         <label class="setting-row" for="presentationToggle"><span class="setting-label"><img src="icons/monitor-up.svg" alt=""><span>演示模式<small>抑制气泡和语音</small></span></span><span class="switch"><input id="presentationToggle" type="checkbox"><span></span></span></label>
         <label class="setting-row" for="voiceToggle"><span class="setting-label"><img src="icons/volume-2.svg" alt=""><span>语音播放<small>模型语音或系统语音降级</small></span></span><span class="switch"><input id="voiceToggle" type="checkbox" checked><span></span></span></label>
         <label class="setting-row" for="captionToggle"><span class="setting-label"><img src="icons/captions.svg" alt=""><span>字幕<small>始终可用的文字降级</small></span></span><span class="switch"><input id="captionToggle" type="checkbox" checked><span></span></span></label>
+        <label class="setting-row" for="openAtLoginToggle"><span class="setting-label"><img src="icons/power.svg" alt=""><span>登录时启动<small>仅打包版本生效</small></span></span><span class="switch"><input id="openAtLoginToggle" type="checkbox"><span></span></span></label>
       </div>
     </section>
 
@@ -65,6 +85,10 @@
       <div class="realtime-bar">
         <button id="realtimeToggle" class="button realtime-toggle" type="button" aria-pressed="false"><img src="icons/volume-2.svg" alt=""><span>实时对话</span></button>
         <span id="realtimeStatus" role="status" aria-live="polite">麦克风关闭</span>
+      </div>
+      <div id="observationNote" class="observation-note" hidden>
+        <small>屏幕线索</small>
+        <span id="observationNoteText"></span>
       </div>
       <div id="conversation" class="conversation" aria-live="polite"></div>
       <form id="messageForm" class="message-form">

@@ -107,6 +107,12 @@ function decideNudge({ phase, activeLevel = 'balanced', dnd, presentationMode, c
   return { action: 'suppress', reason: 'insufficient_evidence' };
 }
 
+function nudgePrompt(kind) {
+  return kind === 'repeated_attempt'
+    ? '这个操作似乎重复了几次，需要我一起看看吗？'
+    : '这个错误似乎重复出现，需要我一起看看吗？';
+}
+
 function fakeReply(input, turn) {
   const text = String(input || '').trim();
   if (!text) return { ok: false, code: 'empty_input', message: '请输入一句话。' };
@@ -115,5 +121,5 @@ function fakeReply(input, turn) {
   return { ok: true, text: '这是本机离线回应。请继续描述当前问题，模型服务恢复后可以获得完整回答。' };
 }
 
-  return { PHASES, initialState, transition, decideNudge, fakeReply };
+  return { PHASES, initialState, transition, decideNudge, nudgePrompt, fakeReply };
 });
