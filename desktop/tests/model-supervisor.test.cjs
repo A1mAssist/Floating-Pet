@@ -272,6 +272,8 @@ test('remote start uses a fixed chat command and keeps the remote service detach
   await supervisor.start();
   assert.equal(supervisor.getState().state, 'ready');
   const commandChild = spawnImpl.children[1];
+  assert.equal(commandChild.spawnOptions.cwd, directory);
+  assert.deepEqual(commandChild.args.slice(-3, -1), ['--', 'competition-a']);
   assert.match(commandChild.args.at(-1), /^cd ~\/MiniCPM-o \|\| exit 1;/);
   assert.match(commandChild.args.at(-1), /MINICPM_MODE=chat/);
   await supervisor.stop();

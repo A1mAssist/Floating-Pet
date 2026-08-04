@@ -611,7 +611,15 @@ function createSupervisor(options = {}) {
     } catch {
       return;
     }
-    await Promise.race([exit, delay(stopTimeoutMs)]);
+    let timeoutId;
+    const timeout = new Promise((resolve) => {
+      timeoutId = setTimeout(resolve, stopTimeoutMs);
+    });
+    try {
+      await Promise.race([exit, timeout]);
+    } finally {
+      clearTimeout(timeoutId);
+    }
     if (!exited) {
       try {
         child.kill('SIGKILL');
