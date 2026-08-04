@@ -9,7 +9,7 @@
     "check": "node scripts/check.mjs",
     "start": "npm run build && electron .",
     "start:fake": "npm run build && electron . --fake-model",
-    "test:unit": "node --test tests/core.test.cjs tests/model-client.test.cjs tests/realtime-client.test.cjs tests/realtime-playback.test.cjs",
+    "test:unit": "node --test tests/core.test.cjs tests/config.test.cjs tests/model-supervisor.test.cjs tests/model-client.test.cjs tests/realtime-client.test.cjs tests/realtime-playback.test.cjs",
     "test:e2e": "npm run build && node tests/e2e.cjs",
     "test:service": "cd .. && python -m unittest discover -s service/tests -v",
     "test:integration": "node --test tests/realtime-service.integration.test.cjs",

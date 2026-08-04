@@ -1,6 +1,6 @@
 # Floating Pet MiniCPM-o Local Duplex Preview
 
-Windows 桌面悬浮宠物。当前源码同时支持回合制多模态请求和显式开启的音频/视频实时对话；Renderer 不直接联网，HTTP 与 WebSocket 都由 Electron 主进程持有。现有 `release/` 中的 `0.1.0` 产物仍是旧版 Fake-only 预览，本轮未重新打包。
+Windows 桌面悬浮宠物。当前源码同时支持回合制多模态请求和显式开启的音频/视频实时对话；Renderer 不直接联网，HTTP 与 WebSocket 都由 Electron 主进程持有。模型不可达时，桌宠仍可启动并提供明确标记的本机离线回应。
 
 ## 已实现
 
@@ -28,19 +28,47 @@ Windows 桌面悬浮宠物。当前源码同时支持回合制多模态请求和
 
 ## 桌面端运行
 
-```powershell
-Set-Location 'D:\Workspaces\MiniCPM-contest\desktop'
+```
+cd desktop
 npm ci
 npm start
 ```
 
 默认连接回合制 `http://127.0.0.1:18000` 和实时 `ws://127.0.0.1:18000/v1/realtime`。完全离线的桌面演示使用：
 
-```powershell
+```
 npm run start:fake
 ```
 
 左键或聚焦桌宠后按 Enter 开始陪伴，右键打开控制菜单。媒体输入默认关闭；先在“陪伴设置”中开启麦克风，再进入协助卡点击“实时对话”。仅开启麦克风时使用 `mode=audio`；摄像头或屏幕可用时使用 `mode=video`，服务适配层会把音频加视觉输入映射到目标模型的 `mode=omni`。
+
+### 模型连接配置
+
+设置面板中的连接配置保存在应用用户数据目录的 `config.json`，只保存经过校验的非秘密元数据。配置形状如下，示例值不是实际凭据：
+
+```json
+{
+  "id": "competition-a",
+  "label": "比赛机器 A",
+  "transport": "ssh",
+  "credentialDir": "C:\\private\\credentials",
+  "sshConfig": "ssh_config",
+  "sshTarget": "modelers-npu",
+  "localPort": 18000,
+  "remoteHost": "127.0.0.1",
+  "remotePort": 8000,
+  "httpBase": "http://127.0.0.1:18000",
+  "realtimeUrl": "ws://127.0.0.1:18000/v1/realtime",
+  "remoteRoot": null,
+  "desiredMode": "chat"
+}
+```
+
+`transport: direct` 直接使用 `httpBase` 与 `realtimeUrl`，不启动 SSH/FRP。`transport: ssh` 只在本机启动受控的 `ssh.exe` 和可选 `frpc.exe`；`credentialDir` 只保存目录路径，私钥、token 和原始媒体不会写入配置。`remoteRoot` 可选；为空时只检查已运行的远端服务，不执行远端启动命令。退出桌宠会清理本机转发进程，但不会停止远端模型服务。
+
+连接状态只使用以下稳定标签：`idle`、`starting`、`forwarding`、`probing`、`ready`、`credentials_missing`、`ssh_unavailable`、`connection_refused`、`connection_reset`、`remote_start_failed`、`health_timeout`、`mode_mismatch`、`stopped`。设置中的“重新连接”只重试当前 profile；失败时协助卡仍可打开，文字回退为本机离线回应。
+
+“登录时启动”默认关闭，只有打包后的 Windows 应用才调用系统登录项 API；开发和测试运行只保存偏好，不注册开发进程。
 
 桌面端环境变量：
 
@@ -71,9 +99,9 @@ MINICPM_PROMPT_WAV=/workspace/prompt.wav \
 ./service/start_minicpmo.sh
 ```
 
-服务默认监听远端 `127.0.0.1:8000`，桌面默认连接本机 `18000`。通过 SSH 使用时，在 Windows 另开终端建立端口转发：
+服务默认监听远端 `127.0.0.1:8000`，桌面默认连接本机 `18000`。需要手动验证隧道时，建立端口转发：
 
-```powershell
+```
 ssh -N -L 18000:127.0.0.1:8000 USER@ASCEND_HOST
 ```
 
@@ -122,7 +150,7 @@ server: session.closed
 
 ## 验证
 
-```powershell
+```
 npm run check
 npm run test:unit
 npm run test:e2e
@@ -149,15 +177,16 @@ $env:FLOATING_PET_MODEL_URL='http://127.0.0.1:18000'
 npm run test:real:screen
 ```
 
-2026-07-22 本地结果：
+2026-08-04 本地结果：
 
 - `check`：PASS
-- `test:unit`：65/65 PASS
-- `test:e2e`：4/4 PASS（Fake Adapter、Fake Realtime 音频/视觉、HTTP Stub 屏幕观察、chat 媒体能力门禁）
+- `test:unit`：89/89 PASS，包含配置持久化与 Node 模型监督器
+- `test:e2e`：5/5 PASS（Fake Adapter、设置重启恢复、Fake Realtime 音频/视觉、HTTP Stub 屏幕观察、chat 媒体能力门禁）
 - `test:service`：41/41 PASS
 - `test:integration`：1/1 PASS，真实 Node `RealtimeClient` 连接自动启动的 Python Uvicorn Duplex Stub，覆盖 `mode=audio` 与 `mode=video`
+- `package` / `verify:package`：NSIS、Portable、ZIP 均生成并通过源码 hash、包内容和生产启动 smoke
 
-同日 Ascend 910B2 真机结果：`/health` 为 `ready / duplex / npu:0 / fake=false`。真实音频会话的 prepare/首文字/首音频/关闭分别为 `13.411s / 33.145s / 33.146s / 0.523s`，输出 `96,000` 字节非静音 24 kHz PCM，峰值 `0.8087769`；真实视频会话分别为 `4.507s / 8.841s / 8.842s / 0.511s`，输出 `96,000` 字节，峰值 `0.1311340`。客户端收到正常中文 `你好，屏幕` 与 `屏幕上的颜色`。
+2026-07-22 Ascend 910B2 真机结果：`/health` 为 `ready / duplex / npu:0 / fake=false`。真实音频会话的 prepare/首文字/首音频/关闭分别为 `13.411s / 33.145s / 33.146s / 0.523s`，输出 `96,000` 字节非静音 24 kHz PCM，峰值 `0.8087769`；真实视频会话分别为 `4.507s / 8.841s / 8.842s / 0.511s`，输出 `96,000` 字节，峰值 `0.1311340`。客户端收到正常中文 `你好，屏幕` 与 `屏幕上的颜色`。
 
 同一服务上的 FIFO 连续输入验收也通过：以 1 Hz 推送 10 个带唯一标记的音频块，全部接受并按 `1..10` 顺序发送，最大并发发送为 1，总耗时 `26.669s`；服务日志无 `input_backlog` 或 `backend_stuck`。默认队列最多保留 30 个约 1 秒块（含正在发送块），第 31 块会明确停止会话，不会静默覆盖旧输入。
 
@@ -167,13 +196,13 @@ npm run test:real:screen
 
 ## 打包边界
 
-本轮按要求不打安装包。`release/` 中的 NSIS、Portable EXE 和 ZIP 仍是旧版 Fake-only `0.1.0`，不包含当前 Duplex 源码。恢复打包时运行：
+`release/` 中的 `0.1.0` NSIS、Portable EXE 和 ZIP 已由当前源码重新生成。复现命令：
 
-```powershell
+```
 npm run package
 npm run verify:package
 ```
 
-源码变化后旧包的 asar 哈希应被 `verify:package` 判为过期。预览包也未配置 Windows 代码签名证书，系统属性显示 `NotSigned`。
+`verify:package` 会校验必需运行时模块、Renderer 资源和源码 hash，拒绝包含测试/脚本的包，并分别启动 `win-unpacked` 与 Portable 产物检查零媒体、零输入、IDLE、透明置顶和不抢焦点。源码变化后旧包会被判为过期。当前预览包未配置 Windows 代码签名证书，系统属性显示 `NotSigned`。
 
 原始音视频和连续屏幕帧不落盘；停止陪伴、暂停采集或退出时会停止已开启的媒体轨道。手动回合制仅在发送消息时提交当前文字、单帧和短音频；开启屏幕、主动程度非安静且未启用勿扰/演示模式时，`chat` 模式会低频提交所选画面的当前单帧用于重复问题检测；实时模式仅在用户点击“实时对话”后持续发送，并在离开协助卡时停止。

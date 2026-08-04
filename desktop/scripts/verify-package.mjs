@@ -35,6 +35,8 @@ try {
     'src/main.cjs',
     'src/preload.cjs',
     'src/core.cjs',
+    'src/config.cjs',
+    'src/model-supervisor.cjs',
     'src/model-client.cjs',
     'src/realtime-client.cjs',
     'dist/index.html',
