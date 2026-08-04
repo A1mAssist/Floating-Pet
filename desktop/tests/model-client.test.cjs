@@ -11,6 +11,8 @@ const {
   capabilities,
   fakeCapabilities
 } = require('../src/model-client.cjs');
+const { normalizeProfile } = require('../src/config.cjs');
+const { getModelEndpoints } = require('../src/model-supervisor.cjs');
 
 const config = {
   endpoint: 'http://127.0.0.1:18000',
@@ -41,6 +43,30 @@ test('sends a bounded OpenAI chat completion and returns remote text', async () 
     messages: [{ role: 'user', content: '你好' }],
     stream: false
   });
+});
+
+test('uses a selected profile endpoint and model without serializing its token', async () => {
+  const profile = normalizeProfile({
+    id: 'direct-other',
+    label: 'Other service',
+    transport: 'direct',
+    desiredMode: 'chat',
+    httpBase: 'https://model.example.test/api',
+    realtimeUrl: 'wss://model.example.test/realtime',
+    model: 'selected-model'
+  });
+  const endpoints = getModelEndpoints(profile, { FLOATING_PET_MODEL_TOKEN: 'PROFILE_TOKEN_SECRET' });
+  let request;
+  const result = await chat(input, { ...endpoints, timeoutMs: 100 }, async (url, options) => {
+    request = { url, body: JSON.parse(options.body) };
+    return jsonResponse({ choices: [{ message: { content: 'profile reply' } }] });
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(request.url, 'https://model.example.test/api/v1/chat/completions');
+  assert.equal(request.body.model, 'selected-model');
+  const publicState = { state: 'ready', code: null, health: { mode: profile.desiredMode } };
+  assert.equal(JSON.stringify(publicState).includes(endpoints.token), false);
 });
 
 test('attaches one validated image only to the last user message', async () => {

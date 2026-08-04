@@ -27,11 +27,24 @@ const api = {
       return () => ipcRenderer.removeListener('capture:shutdown', wrapped);
     }
   }),
+  settings: Object.freeze({
+    get: () => ipcRenderer.invoke('settings:get'),
+    update: (patch) => ipcRenderer.invoke('settings:update', patch)
+  }),
   model: Object.freeze({
     chat: (request) => ipcRenderer.invoke('model:chat', request),
     capabilities: () => ipcRenderer.invoke('model:capabilities'),
     analyzeScreen: (request) => ipcRenderer.invoke('model:analyze-screen', request),
-    cancelScreenAnalysis: (requestId) => ipcRenderer.send('model:cancel-screen-analysis', requestId)
+    cancelScreenAnalysis: (requestId) => ipcRenderer.send('model:cancel-screen-analysis', requestId),
+    connectionState: () => ipcRenderer.invoke('model:connection-state'),
+    connect: () => ipcRenderer.invoke('model:connect'),
+    selectProfile: (id) => ipcRenderer.invoke('model:select-profile', id),
+    selectCredentials: () => ipcRenderer.invoke('model:select-credentials'),
+    onConnectionState: (handler) => {
+      const wrapped = (_event, state) => handler(state);
+      ipcRenderer.on('model:connection-state-changed', wrapped);
+      return () => ipcRenderer.removeListener('model:connection-state-changed', wrapped);
+    }
   }),
   realtime: Object.freeze({
     start: (request) => ipcRenderer.invoke('realtime:start', request),

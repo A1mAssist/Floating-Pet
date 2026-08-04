@@ -1,8 +1,10 @@
 'use strict';
 
-const { app, BrowserWindow, Menu, Tray, ipcMain, screen: electronScreen, session, desktopCapturer, nativeImage } = require('electron');
+const { app, BrowserWindow, Menu, Tray, ipcMain, screen: electronScreen, session, desktopCapturer, nativeImage, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
+const { normalizeProfile, normalizeUserConfig, readUserConfig, writeUserConfig } = require('./config.cjs');
+const { createSupervisor, getModelEndpoints } = require('./model-supervisor.cjs');
 const {
   chat: modelChat,
   fakeChat,
@@ -25,7 +27,7 @@ const smokeIndex = process.argv.indexOf('--smoke-report');
 const SMOKE_REPORT = smokeIndex >= 0 ? path.resolve(process.argv[smokeIndex + 1] || '') : null;
 const WINDOW_SIZE = { width: 460, height: 640 };
 const parsedModelTimeout = Number.parseInt(process.env.FLOATING_PET_MODEL_TIMEOUT_MS || '', 10);
-const MODEL_CONFIG = Object.freeze({
+const LEGACY_MODEL_CONFIG = Object.freeze({
   endpoint: process.env.FLOATING_PET_MODEL_URL || 'http://127.0.0.1:18000',
   model: process.env.FLOATING_PET_MODEL_NAME || 'cpmo',
   token: process.env.FLOATING_PET_MODEL_TOKEN || '',
@@ -33,7 +35,7 @@ const MODEL_CONFIG = Object.freeze({
 });
 const parsedRealtimeTimeout = Number.parseInt(process.env.FLOATING_PET_REALTIME_TIMEOUT_MS || '', 10);
 const parsedRealtimeOutputTimeout = Number.parseInt(process.env.FLOATING_PET_REALTIME_OUTPUT_TIMEOUT_MS || '', 10);
-const REALTIME_CONFIG = Object.freeze({
+const LEGACY_REALTIME_CONFIG = Object.freeze({
   endpoint: process.env.FLOATING_PET_REALTIME_URL || 'ws://127.0.0.1:18000/v1/realtime',
   timeoutMs: Number.isInteger(parsedRealtimeTimeout) && parsedRealtimeTimeout >= 1000 && parsedRealtimeTimeout <= 300000
     ? parsedRealtimeTimeout
@@ -45,6 +47,17 @@ const REALTIME_CONFIG = Object.freeze({
 
 let mainWindow;
 let tray;
+let configFilePath = null;
+let userConfig = normalizeUserConfig(null);
+let activeProfile = null;
+let modelSupervisor = null;
+let modelSupervisorUnsubscribe = null;
+let supervisorOperation = Promise.resolve();
+let connectionState = { state: 'idle', code: null, health: null };
+let shutdownStarted = false;
+let shutdownReady = false;
+let lastWindowPosition = { x: null, y: null };
+let settingsOperation = Promise.resolve();
 let selectedSourceId = null;
 let snapTimer = null;
 let clickThroughInitialized = false;
@@ -83,6 +96,101 @@ function isJpegFrame(value) {
   }
 }
 
+function isRecord(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function currentModelConfig(signal = null) {
+  if (!activeProfile) return signal ? { ...LEGACY_MODEL_CONFIG, signal } : LEGACY_MODEL_CONFIG;
+  const endpoints = getModelEndpoints(activeProfile);
+  return {
+    endpoint: endpoints.endpoint,
+    model: endpoints.model,
+    token: endpoints.token,
+    timeoutMs: LEGACY_MODEL_CONFIG.timeoutMs,
+    ...(signal ? { signal } : {})
+  };
+}
+
+function currentRealtimeConfig() {
+  if (!activeProfile) return LEGACY_REALTIME_CONFIG;
+  return {
+    endpoint: getModelEndpoints(activeProfile).realtimeEndpoint,
+    timeoutMs: LEGACY_REALTIME_CONFIG.timeoutMs,
+    outputTimeoutMs: LEGACY_REALTIME_CONFIG.outputTimeoutMs
+  };
+}
+
+function publicSettings() {
+  return normalizeUserConfig(userConfig);
+}
+
+function publishConnectionState(value) {
+  connectionState = value && typeof value === 'object'
+    ? { state: value.state, code: value.code ?? null, health: value.health ?? null }
+    : { state: 'idle', code: null, health: null };
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('model:connection-state-changed', connectionState);
+  }
+}
+
+function applyLoginSetting() {
+  if (app.isPackaged && !TEST_MODE) {
+    try {
+      app.setLoginItemSettings({ openAtLogin: userConfig.preferences.openAtLogin });
+    } catch {
+      // Keep the desktop usable if Windows rejects login-item registration.
+    }
+  }
+}
+
+function reconfigureSupervisor(profile) {
+  const run = supervisorOperation.catch(() => {}).then(async () => {
+    modelSupervisorUnsubscribe?.();
+    modelSupervisorUnsubscribe = null;
+    const previous = modelSupervisor;
+    modelSupervisor = null;
+    if (previous) await previous.stop();
+    publishConnectionState({ state: 'idle', code: null, health: null });
+    if (!profile || FAKE_MODEL) return connectionState;
+
+    const next = createSupervisor({ profile });
+    modelSupervisor = next;
+    modelSupervisorUnsubscribe = next.onState((state) => {
+      if (modelSupervisor === next) publishConnectionState(state);
+    });
+    void next.start();
+    return next.getState();
+  });
+  supervisorOperation = run;
+  return run;
+}
+
+async function stopSupervisor() {
+  await settingsOperation.catch(() => {});
+  await supervisorOperation.catch(() => {});
+  modelSupervisorUnsubscribe?.();
+  modelSupervisorUnsubscribe = null;
+  const current = modelSupervisor;
+  modelSupervisor = null;
+  if (current) await current.stop();
+}
+
+async function saveUserConfig(next, { reconnect = false } = {}) {
+  if (!configFilePath) throw new Error('config_not_ready');
+  await writeUserConfig(configFilePath, next);
+  userConfig = normalizeUserConfig(next);
+  activeProfile = userConfig.profiles[userConfig.activeProfileId] || null;
+  applyLoginSetting();
+  if (reconnect) {
+    realtimeRequestGeneration += 1;
+    await closeRealtime('profile_changed');
+    cancelScreenAnalyses();
+    await reconfigureSupervisor(activeProfile);
+  }
+  return publicSettings();
+}
+
 function sendCommand(command) {
   if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('app:command', command);
 }
@@ -115,10 +223,46 @@ function clamp(value, min, max) {
   return Math.min(max, Math.max(min, value));
 }
 
+function initialWindowPosition() {
+  const primary = electronScreen.getPrimaryDisplay().workArea;
+  const fallback = {
+    x: primary.x + primary.width - WINDOW_SIZE.width - 18,
+    y: primary.y + primary.height - WINDOW_SIZE.height - 18
+  };
+  if (!Number.isInteger(userConfig.window.x) || !Number.isInteger(userConfig.window.y)) return fallback;
+  const work = electronScreen.getDisplayNearestPoint({ x: userConfig.window.x, y: userConfig.window.y }).workArea;
+  const minX = work.x + 8;
+  const minY = work.y + 8;
+  return {
+    x: clamp(userConfig.window.x, minX, Math.max(minX, work.x + work.width - WINDOW_SIZE.width - 8)),
+    y: clamp(userConfig.window.y, minY, Math.max(minY, work.y + work.height - WINDOW_SIZE.height - 8))
+  };
+}
+
+function rememberWindowPosition() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  const bounds = mainWindow.getBounds();
+  lastWindowPosition = { x: bounds.x, y: bounds.y };
+}
+
+async function persistWindowPosition() {
+  const run = settingsOperation.catch(() => {}).then(async () => {
+    rememberWindowPosition();
+    if (!configFilePath || !Number.isInteger(lastWindowPosition.x) || !Number.isInteger(lastWindowPosition.y)) return;
+    userConfig = normalizeUserConfig({ ...userConfig, window: lastWindowPosition });
+    await writeUserConfig(configFilePath, userConfig);
+  });
+  settingsOperation = run;
+  return run;
+}
+
 function moveWindow(x, y) {
   if (!mainWindow || mainWindow.isDestroyed()) return;
   const { width, height } = mainWindow.getContentBounds();
-  mainWindow.setContentBounds({ x: Math.round(x), y: Math.round(y), width, height }, false);
+  const nextX = Math.round(x);
+  const nextY = Math.round(y);
+  mainWindow.setContentBounds({ x: nextX, y: nextY, width, height }, false);
+  lastWindowPosition = { x: nextX, y: nextY };
 }
 
 function snapToEdge(releaseVelocity = { x: 0, y: 0 }) {
@@ -137,6 +281,7 @@ function snapToEdge(releaseVelocity = { x: 0, y: 0 }) {
   const targetY = clamp(bounds.y + releaseY * 0.06, work.y + 8, work.y + work.height - bounds.height - 8);
   if (reducedMotion) {
     moveWindow(targetX, targetY);
+    void persistWindowPosition().catch(() => {});
     return;
   }
   let x = bounds.x;
@@ -162,16 +307,17 @@ function snapToEdge(releaseVelocity = { x: 0, y: 0 }) {
     if (currentAt - startedAt >= 500 || (Math.abs(targetX - x) < 0.5 && Math.abs(targetY - y) < 0.5 && Math.abs(vx) < 5 && Math.abs(vy) < 5)) {
       moveWindow(targetX, targetY);
       stopSnap();
+      void persistWindowPosition().catch(() => {});
     }
   }, 16);
 }
 
 function createWindow() {
-  const work = electronScreen.getPrimaryDisplay().workArea;
+  const position = initialWindowPosition();
+  lastWindowPosition = position;
   mainWindow = new BrowserWindow({
     ...WINDOW_SIZE,
-    x: work.x + work.width - WINDOW_SIZE.width - 18,
-    y: work.y + work.height - WINDOW_SIZE.height - 18,
+    ...position,
     frame: false,
     transparent: true,
     alwaysOnTop: true,
@@ -255,7 +401,7 @@ function trustedRenderer(event) {
 }
 
 function realtimeEndpoint(mode) {
-  const url = new URL(REALTIME_CONFIG.endpoint);
+  const url = new URL(currentRealtimeConfig().endpoint);
   if (!['ws:', 'wss:'].includes(url.protocol)) throw new Error('invalid_realtime_endpoint');
   url.searchParams.set('mode', mode);
   return url.toString();
@@ -277,6 +423,94 @@ function closeRealtime(reason = 'shutdown') {
 function cancelScreenAnalyses() {
   for (const controller of screenAnalysisControllers.values()) controller.abort();
   screenAnalysisControllers.clear();
+}
+
+async function updateSettingsNow(patch) {
+  if (!isRecord(patch)) return { ok: false, code: 'invalid_settings' };
+  const next = {
+    ...userConfig,
+    preferences: { ...userConfig.preferences },
+    profiles: { ...userConfig.profiles }
+  };
+  let reconnect = false;
+
+  if (patch.preferences != null) {
+    if (!isRecord(patch.preferences)) return { ok: false, code: 'invalid_settings' };
+    const preferences = patch.preferences;
+    if (Object.hasOwn(preferences, 'activeLevel')) {
+      if (!['quiet', 'balanced', 'active'].includes(preferences.activeLevel)) return { ok: false, code: 'invalid_settings' };
+      next.preferences.activeLevel = preferences.activeLevel;
+    }
+    for (const name of ['voice', 'captions', 'openAtLogin']) {
+      if (!Object.hasOwn(preferences, name)) continue;
+      if (typeof preferences[name] !== 'boolean') return { ok: false, code: 'invalid_settings' };
+      next.preferences[name] = preferences[name];
+    }
+  }
+
+  if (Object.hasOwn(patch, 'profile')) {
+    const profile = normalizeProfile(patch.profile);
+    if (!profile) return { ok: false, code: 'invalid_profile' };
+    if (!Object.hasOwn(next.profiles, profile.id) && Object.keys(next.profiles).length >= 32) {
+      return { ok: false, code: 'profile_limit' };
+    }
+    next.profiles[profile.id] = profile;
+    reconnect = profile.id === next.activeProfileId;
+  }
+
+  if (Object.hasOwn(patch, 'removeProfileId')) {
+    const id = patch.removeProfileId;
+    if (typeof id !== 'string' || !Object.hasOwn(next.profiles, id)) return { ok: false, code: 'invalid_profile' };
+    delete next.profiles[id];
+    if (next.activeProfileId === id) {
+      next.activeProfileId = '';
+      reconnect = true;
+    }
+  }
+
+  if (Object.hasOwn(patch, 'activeProfileId')) {
+    const id = patch.activeProfileId;
+    if (id !== '' && (typeof id !== 'string' || !Object.hasOwn(next.profiles, id))) {
+      return { ok: false, code: 'invalid_profile' };
+    }
+    reconnect ||= id !== next.activeProfileId;
+    next.activeProfileId = id;
+  }
+
+  try {
+    const settings = await saveUserConfig(normalizeUserConfig(next), { reconnect });
+    return { ok: true, settings };
+  } catch {
+    return { ok: false, code: 'save_failed' };
+  }
+}
+
+function updateSettings(patch) {
+  const run = settingsOperation.catch(() => {}).then(() => updateSettingsNow(patch));
+  settingsOperation = run;
+  return run;
+}
+
+async function selectCredentialDirectory() {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '选择模型连接凭据目录',
+      properties: ['openDirectory', 'dontAddToRecent']
+    });
+    if (result.canceled || result.filePaths.length !== 1) return { ok: false, code: 'cancelled' };
+    const directory = result.filePaths[0];
+    const entries = await fs.promises.readdir(directory, { withFileTypes: true });
+    const files = new Set(entries.filter((entry) => entry.isFile()).map((entry) => entry.name.toLowerCase()));
+    const hasKey = ['id_rsa', 'id_ed25519', 'key'].some((name) => files.has(name));
+    const hasFrpc = files.has('frpc.exe');
+    const hasFrpcConfig = files.has('frpc_visitor.toml');
+    if (!files.has('ssh_config') || !hasKey || hasFrpc !== hasFrpcConfig) {
+      return { ok: false, code: 'credentials_missing' };
+    }
+    return { ok: true, credentialDir: directory };
+  } catch {
+    return { ok: false, code: 'credentials_missing' };
+  }
 }
 
 function registerIpc() {
@@ -318,13 +552,43 @@ function registerIpc() {
     selectedSourceId = id;
     return true;
   });
+  ipcMain.handle('settings:get', (event) => {
+    if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
+    return { ok: true, settings: publicSettings() };
+  });
+  ipcMain.handle('settings:update', async (event, patch) => {
+    if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
+    return updateSettings(patch);
+  });
+  ipcMain.handle('model:connection-state', (event) => {
+    if (!trustedRenderer(event)) return { state: 'idle', code: 'invalid_sender', health: null };
+    return connectionState;
+  });
+  ipcMain.handle('model:connect', async (event) => {
+    if (!trustedRenderer(event)) return { state: 'idle', code: 'invalid_sender', health: null };
+    await supervisorOperation.catch(() => {});
+    if (!modelSupervisor) return connectionState;
+    try {
+      return await modelSupervisor.retry();
+    } catch {
+      return { state: 'connection_refused', code: 'connection_refused', health: null };
+    }
+  });
+  ipcMain.handle('model:select-profile', async (event, id) => {
+    if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
+    return updateSettings({ activeProfileId: id });
+  });
+  ipcMain.handle('model:select-credentials', async (event) => {
+    if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
+    return selectCredentialDirectory();
+  });
   ipcMain.handle('model:chat', async (event, request) => {
     if (!trustedRenderer(event)) {
       return { ok: false, code: 'invalid_sender', message: '模型请求无效。' };
     }
     if (FAKE_MODEL) return fakeChat(request);
     if (request?.localOnly === true) return fallbackChat(request);
-    return modelChat(request, MODEL_CONFIG);
+    return modelChat(request, currentModelConfig());
   });
   ipcMain.handle('model:capabilities', async (event) => {
     if (!trustedRenderer(event)) {
@@ -333,7 +597,7 @@ function registerIpc() {
         realtime: false, audioInput: false, video: false, audioOutput: false, serviceFake: false, reason: 'invalid_sender'
       };
     }
-    return FAKE_MODEL ? fakeCapabilities() : modelCapabilities(MODEL_CONFIG);
+    return FAKE_MODEL ? fakeCapabilities() : modelCapabilities(currentModelConfig());
   });
   ipcMain.handle('model:analyze-screen', async (event, request) => {
     if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
@@ -343,7 +607,7 @@ function registerIpc() {
     const controller = new AbortController();
     screenAnalysisControllers.set(request.requestId, controller);
     try {
-      return await modelAnalyzeScreen(request.imageDataUrl, { ...MODEL_CONFIG, signal: controller.signal });
+      return await modelAnalyzeScreen(request.imageDataUrl, currentModelConfig(controller.signal));
     } finally {
       if (screenAnalysisControllers.get(request.requestId) === controller) screenAnalysisControllers.delete(request.requestId);
     }
@@ -367,11 +631,12 @@ function registerIpc() {
     let unsubscribe;
     try {
       const Client = FAKE_MODEL ? FakeRealtimeClient : RealtimeClient;
+      const realtimeConfig = currentRealtimeConfig();
       client = new Client({
         url: realtimeEndpoint(request.mode),
         mode: request.mode,
-        timeoutMs: REALTIME_CONFIG.timeoutMs,
-        outputTimeoutMs: REALTIME_CONFIG.outputTimeoutMs
+        timeoutMs: realtimeConfig.timeoutMs,
+        outputTimeoutMs: realtimeConfig.outputTimeoutMs
       });
       realtimeClient = client;
       unsubscribe = client.onEvent((output) => {
@@ -483,6 +748,14 @@ if (!app.requestSingleInstanceLock()) {
     if (mainWindow) mainWindow.showInactive();
   });
   app.whenReady().then(async () => {
+    configFilePath = path.join(app.getPath('userData'), 'config.json');
+    try {
+      userConfig = await readUserConfig(configFilePath);
+    } catch {
+      userConfig = normalizeUserConfig(null);
+    }
+    activeProfile = userConfig.profiles[userConfig.activeProfileId] || null;
+    applyLoginSetting();
     await configureMedia();
     registerIpc();
     createWindow();
@@ -490,12 +763,29 @@ if (!app.requestSingleInstanceLock()) {
     tray = new Tray(trayImage);
     tray.on('click', () => mainWindow?.showInactive());
     rebuildTrayMenu();
+    await reconfigureSupervisor(activeProfile);
   });
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
+    if (shutdownReady) return;
+    event.preventDefault();
+    if (shutdownStarted) return;
+    shutdownStarted = true;
     stopSnap();
-    void closeRealtime('shutdown');
+    realtimeRequestGeneration += 1;
     cancelScreenAnalyses();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:shutdown');
+    let timeoutId;
+    const timeout = new Promise((resolve) => {
+      timeoutId = setTimeout(resolve, 4_000);
+    });
+    void Promise.race([
+      Promise.allSettled([persistWindowPosition(), closeRealtime('shutdown'), stopSupervisor()]),
+      timeout
+    ]).finally(() => {
+      clearTimeout(timeoutId);
+      shutdownReady = true;
+      app.quit();
+    });
   });
   app.on('window-all-closed', () => app.quit());
 }
