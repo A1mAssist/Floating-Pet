@@ -13,6 +13,7 @@ const MAX_PROFILES = 32;
 const MAX_CONFIG_LENGTH = 1_048_576;
 const MAX_PATH_LENGTH = 2048;
 const MAX_WINDOW_COORDINATE = 1_000_000;
+const writeQueues = new Map();
 
 const DEFAULT_USER_CONFIG = Object.freeze({
   version: 1,
@@ -121,7 +122,7 @@ function normalizeProfile(value) {
   const remoteHost = boundedText(value.remoteHost, 253);
   const remoteRoot = normalizeRemoteRoot(value.remoteRoot);
   if (!credentialDir || !sshConfig || !sshTarget || !remoteHost || remoteRoot === false) return null;
-  if (!/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/.test(sshTarget)) return null;
+  if (sshTarget.startsWith('-') || !/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/.test(sshTarget)) return null;
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/.test(remoteHost)) return null;
   if (!validPort(value.localPort) || !validPort(value.remotePort)) return null;
 
@@ -134,10 +135,14 @@ function normalizeProfile(value) {
     remotePort: value.remotePort,
     remoteRoot
   });
-  if (value.sshPath != null) {
-    const sshPath = normalizeLocalPath(value.sshPath);
-    if (!sshPath) return null;
-    profile.sshPath = sshPath;
+  const hasFrpcConfig = value.frpcConfig != null;
+  const hasVisitorPort = value.visitorPort != null;
+  if (hasFrpcConfig !== hasVisitorPort) return null;
+  if (hasFrpcConfig) {
+    const frpcConfig = normalizeRelativePath(value.frpcConfig);
+    if (!frpcConfig || !validPort(value.visitorPort)) return null;
+    profile.frpcConfig = frpcConfig;
+    profile.visitorPort = value.visitorPort;
   }
   return profile;
 }
@@ -190,16 +195,23 @@ async function readUserConfig(filePath, fsImpl = fs) {
   }
 }
 
-async function writeUserConfig(filePath, config, fsImpl = fs) {
-  const tempPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
-  await fsImpl.mkdir(path.dirname(filePath), { recursive: true });
-  try {
-    await fsImpl.writeFile(tempPath, `${JSON.stringify(normalizeUserConfig(config), null, 2)}\n`, 'utf8');
-    await fsImpl.rename(tempPath, filePath);
-  } catch (error) {
-    await fsImpl.rm(tempPath, { force: true }).catch(() => {});
-    throw error;
-  }
+function writeUserConfig(filePath, config, fsImpl = fs) {
+  const previous = writeQueues.get(filePath) || Promise.resolve();
+  const write = previous.catch(() => {}).then(async () => {
+    const tempPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
+    await fsImpl.mkdir(path.dirname(filePath), { recursive: true });
+    try {
+      await fsImpl.writeFile(tempPath, `${JSON.stringify(normalizeUserConfig(config), null, 2)}\n`, 'utf8');
+      await fsImpl.rename(tempPath, filePath);
+    } catch (error) {
+      await fsImpl.rm(tempPath, { force: true }).catch(() => {});
+      throw error;
+    }
+  });
+  writeQueues.set(filePath, write);
+  return write.finally(() => {
+    if (writeQueues.get(filePath) === write) writeQueues.delete(filePath);
+  });
 }
 
 module.exports = {

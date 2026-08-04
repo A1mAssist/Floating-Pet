@@ -81,6 +81,7 @@ test('rejects invalid port bounds and unsafe SSH arguments', () => {
   assert.equal(normalizeProfile(sshProfile({ remotePort: 65536 })), null);
   assert.equal(normalizeProfile(sshProfile({ sshConfig: '../ssh_config' })), null);
   assert.equal(normalizeProfile(sshProfile({ sshTarget: '-oProxyCommand=bad' })), null);
+  assert.equal(normalizeProfile(sshProfile({ sshTarget: '-Ffoo@host' })), null);
   assert.equal(normalizeProfile(sshProfile({ sshConfig: 'C:ssh_config' })), null);
   assert.equal(normalizeProfile(sshProfile({ sshConfig: '\\ssh_config' })), null);
   assert.equal(normalizeProfile(sshProfile({ model: 'bad\nmodel' })), null);
@@ -91,12 +92,18 @@ test('rejects invalid port bounds and unsafe SSH arguments', () => {
   assert.equal(normalizeProfile(directProfile({ httpBase: 'http://127.0.0.1:0' })), null);
 });
 
-test('SSH profile does not require Modelers-specific FRP metadata', () => {
-  const profile = normalizeProfile(sshProfile({ frp: undefined, frpcConfig: undefined, visitorPort: undefined }));
-  assert.equal(profile.transport, 'ssh');
-  assert.equal(Object.hasOwn(profile, 'frp'), false);
-  assert.equal(Object.hasOwn(profile, 'frpcConfig'), false);
-  assert.equal(Object.hasOwn(profile, 'visitorPort'), false);
+test('SSH profile supports optional FRP without an executable override', () => {
+  const directSsh = normalizeProfile(sshProfile({ sshPath: 'C:\\Windows\\System32\\calc.exe' }));
+  assert.equal(directSsh.transport, 'ssh');
+  assert.equal(Object.hasOwn(directSsh, 'sshPath'), false);
+  assert.equal(Object.hasOwn(directSsh, 'frpcConfig'), false);
+
+  const stcp = normalizeProfile(sshProfile({ frpcConfig: 'frpc_visitor.toml', visitorPort: 22222 }));
+  assert.equal(stcp.frpcConfig, 'frpc_visitor.toml');
+  assert.equal(stcp.visitorPort, 22222);
+  assert.equal(normalizeProfile(sshProfile({ frpcConfig: 'frpc_visitor.toml' })), null);
+  assert.equal(normalizeProfile(sshProfile({ visitorPort: 22222 })), null);
+  assert.equal(normalizeProfile(sshProfile({ frpcConfig: '../visitor.toml', visitorPort: 22222 })), null);
 });
 
 test('concurrent config writes use independent temporary files', async (t) => {
@@ -110,7 +117,7 @@ test('concurrent config writes use independent temporary files', async (t) => {
   ]);
 
   const result = await readUserConfig(file);
-  assert.ok(['quiet', 'active'].includes(result.preferences.activeLevel));
+  assert.equal(result.preferences.activeLevel, 'active');
   assert.deepEqual(await fs.readdir(directory), ['config.json']);
 });
 
