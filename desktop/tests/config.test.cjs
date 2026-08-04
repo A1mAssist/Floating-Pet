@@ -49,7 +49,7 @@ test('malformed config falls back to safe defaults', () => {
 });
 
 test('profile validation rejects shell-shaped paths and unsupported protocols', () => {
-  assert.equal(normalizeProfile({ id: 'x', transport: 'ssh', remoteRoot: '/a; rm -rf /' }), null);
+  assert.equal(normalizeProfile(sshProfile({ remoteRoot: '/a; rm -rf /' })), null);
   assert.equal(normalizeProfile({ id: 'x', transport: 'direct', httpBase: 'file:///secret' }), null);
 });
 
@@ -57,7 +57,6 @@ test('user config write is atomic and readable', async (t) => {
   const file = path.join(os.tmpdir(), `floating-pet-config-${process.pid}.json`);
   t.after(async () => {
     await fs.rm(file, { force: true });
-    await fs.rm(`${file}.tmp-${process.pid}`, { force: true });
   });
   const config = normalizeUserConfig({ preferences: { voice: false } });
   await writeUserConfig(file, config);
@@ -82,11 +81,37 @@ test('rejects invalid port bounds and unsafe SSH arguments', () => {
   assert.equal(normalizeProfile(sshProfile({ remotePort: 65536 })), null);
   assert.equal(normalizeProfile(sshProfile({ sshConfig: '../ssh_config' })), null);
   assert.equal(normalizeProfile(sshProfile({ sshTarget: '-oProxyCommand=bad' })), null);
+  assert.equal(normalizeProfile(sshProfile({ sshConfig: 'C:ssh_config' })), null);
+  assert.equal(normalizeProfile(sshProfile({ sshConfig: '\\ssh_config' })), null);
   assert.equal(normalizeProfile(sshProfile({ model: 'bad\nmodel' })), null);
   assert.equal(normalizeProfile(sshProfile({ label: 'bad\nlabel' })), null);
-  assert.equal(normalizeProfile(sshProfile({ remoteRoot: '/' })).remoteRoot, '/');
+  assert.equal(normalizeProfile(sshProfile({ remoteRoot: '/' })), null);
+  assert.equal(normalizeProfile(sshProfile({ remoteRoot: '~' })), null);
   assert.equal(normalizeProfile(sshProfile({ remoteRoot: '~/MiniCPM-o/' })).remoteRoot, '~/MiniCPM-o');
   assert.equal(normalizeProfile(directProfile({ httpBase: 'http://127.0.0.1:0' })), null);
+});
+
+test('SSH profile does not require Modelers-specific FRP metadata', () => {
+  const profile = normalizeProfile(sshProfile({ frp: undefined, frpcConfig: undefined, visitorPort: undefined }));
+  assert.equal(profile.transport, 'ssh');
+  assert.equal(Object.hasOwn(profile, 'frp'), false);
+  assert.equal(Object.hasOwn(profile, 'frpcConfig'), false);
+  assert.equal(Object.hasOwn(profile, 'visitorPort'), false);
+});
+
+test('concurrent config writes use independent temporary files', async (t) => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'floating-pet-config-concurrent-'));
+  const file = path.join(directory, 'config.json');
+  t.after(() => fs.rm(directory, { recursive: true, force: true }));
+
+  await Promise.all([
+    writeUserConfig(file, normalizeUserConfig({ preferences: { activeLevel: 'quiet' } })),
+    writeUserConfig(file, normalizeUserConfig({ preferences: { activeLevel: 'active' } }))
+  ]);
+
+  const result = await readUserConfig(file);
+  assert.ok(['quiet', 'active'].includes(result.preferences.activeLevel));
+  assert.deepEqual(await fs.readdir(directory), ['config.json']);
 });
 
 test('normalizes window and preference fields and drops invalid profiles', () => {

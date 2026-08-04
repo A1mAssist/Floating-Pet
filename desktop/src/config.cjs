@@ -1,6 +1,7 @@
 'use strict';
 
 const fs = require('node:fs/promises');
+const { randomUUID } = require('node:crypto');
 const os = require('node:os');
 const path = require('node:path');
 
@@ -64,12 +65,15 @@ function normalizeLocalPath(value) {
     : /^[~][\\/]/.test(text)
       ? path.join(os.homedir(), text.slice(2))
       : text;
-  return path.isAbsolute(expanded) ? path.normalize(expanded) : null;
+  return path.isAbsolute(expanded) || path.win32.isAbsolute(expanded) || path.posix.isAbsolute(expanded)
+    ? path.normalize(expanded)
+    : null;
 }
 
 function normalizeRelativePath(value) {
   const text = boundedText(value, MAX_PATH_LENGTH);
-  if (!text || text.startsWith('-') || path.isAbsolute(text) || path.win32.isAbsolute(text) || path.posix.isAbsolute(text)) return null;
+  if (!text || text.startsWith('-') || path.isAbsolute(text) || path.win32.isAbsolute(text) || path.posix.isAbsolute(text)
+    || path.win32.parse(text).root) return null;
   const parts = text.replaceAll('\\', '/').split('/');
   if (parts.some((part) => !part || part === '.' || part === '..')) return null;
   return text;
@@ -78,10 +82,10 @@ function normalizeRelativePath(value) {
 function normalizeRemoteRoot(value) {
   if (value == null || value === '') return null;
   const text = boundedText(value, MAX_PATH_LENGTH);
-  if (!text || !(text === '/' || text === '~' || text.startsWith('/') || text.startsWith('~/'))) return false;
+  if (!text || text === '/' || text === '~' || !(text.startsWith('/') || text.startsWith('~/'))) return false;
   if (!/^[A-Za-z0-9._~/-]+$/.test(text)) return false;
   const normalized = text === '/' || text === '~' ? text : text.replace(/\/+$/, '');
-  if (normalized === '/' || normalized === '~') return normalized;
+  if (normalized === '/' || normalized === '~') return false;
   const parts = normalized.replace(/^~?\//, '').split('/');
   return parts.some((part) => part === '.' || part === '..' || !part) ? false : normalized;
 }
@@ -187,7 +191,7 @@ async function readUserConfig(filePath, fsImpl = fs) {
 }
 
 async function writeUserConfig(filePath, config, fsImpl = fs) {
-  const tempPath = `${filePath}.tmp-${process.pid}`;
+  const tempPath = `${filePath}.tmp-${process.pid}-${randomUUID()}`;
   await fsImpl.mkdir(path.dirname(filePath), { recursive: true });
   try {
     await fsImpl.writeFile(tempPath, `${JSON.stringify(normalizeUserConfig(config), null, 2)}\n`, 'utf8');
