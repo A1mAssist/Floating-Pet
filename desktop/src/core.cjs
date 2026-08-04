@@ -52,6 +52,10 @@ function transition(state, event) {
       next.phase = PHASES.PENDING;
       next.currentEventKey = event.eventKey;
       return next;
+    case `${PHASES.ACTIVE}:ENGAGE`:
+    case `${PHASES.COOLDOWN}:ENGAGE`:
+      next.phase = PHASES.ENGAGED;
+      return next;
     case `${PHASES.PENDING}:SHOW_NUDGE`:
       next.phase = PHASES.NUDGE;
       return next;
@@ -106,12 +110,9 @@ function decideNudge({ phase, activeLevel = 'balanced', dnd, presentationMode, c
 function fakeReply(input, turn) {
   const text = String(input || '').trim();
   if (!text) return { ok: false, code: 'empty_input', message: '请输入一句话。' };
-  if (text === '/fail') return { ok: false, code: 'fake_backend_error', message: '演示模型暂不可用，已保留文字输入。' };
-  if (/steps|map|数组|报错/i.test(text)) {
-    return { ok: true, text: '先确认 task.steps 是数组，再调用 map。也可以用 Array.isArray(task.steps) 做边界检查。' };
-  }
-  if (turn > 1) return { ok: true, text: '我记得这轮在检查 task.steps。下一步是补上空数组后重新运行。' };
-  return { ok: true, text: '这是离线演示回应。我可以继续围绕当前报错整理下一步。' };
+  if (text === '/fail') return { ok: false, code: 'fake_backend_error', message: '本机离线回应暂不可用，已保留文字输入。' };
+  if (turn > 1) return { ok: true, text: '这是本机离线回应。我保留了本轮文字上下文，可以继续说明你想处理的问题。' };
+  return { ok: true, text: '这是本机离线回应。请继续描述当前问题，模型服务恢复后可以获得完整回答。' };
 }
 
   return { PHASES, initialState, transition, decideNudge, fakeReply };

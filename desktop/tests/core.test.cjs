@@ -8,13 +8,13 @@ test('session reducer follows the visible product loop', () => {
   let state = initialState();
   state = transition(state, { type: 'START' });
   state = transition(state, { type: 'INPUT_STARTED', kind: 'screen' });
-  state = transition(state, { type: 'CUES_READY', eventKey: 'repeat-map-error' });
+  state = transition(state, { type: 'CUES_READY', eventKey: 'repeat-error' });
   assert.equal(state.phase, PHASES.PENDING);
   state = transition(state, { type: 'SHOW_NUDGE' });
   assert.equal(state.phase, PHASES.NUDGE);
   state = transition(state, { type: 'ACCEPT' });
   assert.equal(state.phase, PHASES.ENGAGED);
-  assert.deepEqual(state.seenEventKeys, ['repeat-map-error']);
+  assert.deepEqual(state.seenEventKeys, ['repeat-error']);
   state = transition(state, { type: 'FINISH', atMs: 30000 });
   assert.equal(state.phase, PHASES.COOLDOWN);
   assert.equal(state.cooldownUntilMs, 150000);
@@ -24,6 +24,22 @@ test('session reducer follows the visible product loop', () => {
 
 test('illegal transition fails closed', () => {
   assert.throws(() => transition(initialState(), { type: 'ACCEPT' }), /invalid transition/);
+  assert.throws(() => transition(initialState(), { type: 'ENGAGE' }), /invalid transition/);
+});
+
+test('direct engagement enters from active and cooldown without clearing session state', () => {
+  let active = transition(initialState(), { type: 'START' });
+  active = transition(active, { type: 'INPUT_STARTED', kind: 'microphone' });
+  active = transition(active, { type: 'SET_DND', value: true });
+  const engaged = transition(active, { type: 'ENGAGE' });
+  assert.equal(engaged.phase, PHASES.ENGAGED);
+  assert.deepEqual(engaged.activeInputs, ['microphone']);
+  assert.equal(engaged.dnd, true);
+
+  const cooldown = transition(engaged, { type: 'FINISH', atMs: 1_000 });
+  const resumed = transition(cooldown, { type: 'ENGAGE' });
+  assert.equal(resumed.phase, PHASES.ENGAGED);
+  assert.equal(resumed.cooldownUntilMs, 121_000);
 });
 
 test('session reducer preserves input and suppression state', () => {
@@ -93,10 +109,14 @@ test('camera-only observations cannot drive proactive policy', () => {
 });
 
 test('fake adapter has deterministic success and truthful failure', () => {
-  assert.equal(fakeReply('steps 为什么报错', 1).ok, true);
+  const first = fakeReply('steps 为什么报错', 1);
+  const followup = fakeReply('继续', 2);
+  assert.equal(first.ok, true);
+  assert.equal(followup.ok, true);
+  assert.doesNotMatch(`${first.text} ${followup.text}`, /task\.steps|map 无法|空数组/);
   assert.deepEqual(fakeReply('/fail', 1), {
     ok: false,
     code: 'fake_backend_error',
-    message: '演示模型暂不可用，已保留文字输入。'
+    message: '本机离线回应暂不可用，已保留文字输入。'
   });
 });

@@ -131,7 +131,7 @@ test('network, timeout, HTTP, JSON, and output failures degrade through fakeRepl
       const result = await chat(input, { ...config, ...override }, fetchImpl);
       assert.deepEqual(result, {
         ok: true,
-        text: '这是离线演示回应。我可以继续围绕当前报错整理下一步。',
+        text: '这是本机离线回应。请继续描述当前问题，模型服务恢复后可以获得完整回答。',
         source: 'fake',
         degraded: true,
         reason,
@@ -149,7 +149,7 @@ test('preserves fakeReply failure while marking the degradation source', async (
   assert.deepEqual(result, {
     ok: false,
     code: 'fake_backend_error',
-    message: '演示模型暂不可用，已保留文字输入。',
+    message: '本机离线回应暂不可用，已保留文字输入。',
     source: 'fake',
     degraded: true,
     reason: 'http_error',
@@ -170,7 +170,7 @@ test('timeout covers a response body that never finishes', async () => {
 test('runs explicit Fake Adapter mode without marking it as degraded', () => {
   assert.deepEqual(fakeChat(input), {
     ok: true,
-    text: '这是离线演示回应。我可以继续围绕当前报错整理下一步。',
+    text: '这是本机离线回应。请继续描述当前问题，模型服务恢复后可以获得完整回答。',
     source: 'fake',
     degraded: false,
     visualUsed: false,
@@ -181,7 +181,7 @@ test('runs explicit Fake Adapter mode without marking it as degraded', () => {
 test('uses an explicit local fallback without pretending a remote attempt', () => {
   assert.deepEqual(fallbackChat(input), {
     ok: true,
-    text: '这是离线演示回应。我可以继续围绕当前报错整理下一步。',
+    text: '这是本机离线回应。请继续描述当前问题，模型服务恢复后可以获得完整回答。',
     source: 'fake',
     degraded: true,
     reason: 'capability_missing',

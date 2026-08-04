@@ -179,7 +179,7 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   const afterSnapDeadline = await page.evaluate(() => window.pet.test.getBounds());
   assert.ok(Math.abs(afterSnapDeadline.x - beforeSnapDeadline.x) <= 1 && Math.abs(afterSnapDeadline.y - beforeSnapDeadline.y) <= 1, 'edge snap jumps at its deadline');
 
-  await page.focus('#pet');
+  await page.focus('#sessionButton');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'SESSION_ACTIVE');
   assert.equal(await page.locator('body').getAttribute('data-pet-state'), 'listening');
@@ -192,6 +192,18 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   assert.equal(captionClearsStatus, true, 'caption overlaps the pet status');
   const keyboardDurations = await page.locator('#caption').evaluate((element) => getComputedStyle(element).transitionDuration.split(',').map((value) => value.trim()));
   assert.equal(keyboardDurations.every((value) => value === '0s'), true);
+  await page.focus('#sessionButton');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'IDLE_VISIBLE');
+
+  await page.focus('#pet');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
+  assert.equal(await page.locator('#assistCard').getAttribute('data-open'), 'true');
+  await page.waitForFunction(() => document.activeElement?.id === 'messageInput');
+  await page.keyboard.press('Escape');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'COOLDOWN');
+  await page.evaluate(() => window.__floatingPetTest.advanceClock(120001));
 
   await page.click('#pet', { button: 'right' });
   await page.click('#contextSettings');
@@ -249,13 +261,16 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   await page.waitForFunction(() => document.activeElement?.id === 'acceptNudge');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
-  await page.fill('#messageInput', 'steps 为什么报错');
+  assert.equal((await page.locator('#conversation').textContent()).includes('同一个错误重复出现'), true);
+  await page.fill('#messageInput', '这个错误为什么重复出现');
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => document.querySelectorAll('.message.assistant').length >= 2);
   await page.fill('#messageInput', '那下一步呢');
   await page.click('#sendMessage');
   await page.waitForFunction(() => document.querySelectorAll('.message.assistant').length >= 3);
-  assert.equal((await page.locator('#conversation').textContent()).includes('补上空数组后重新运行'), true);
+  const conversationText = await page.locator('#conversation').textContent();
+  assert.equal(conversationText.includes('本机离线回应'), true);
+  assert.equal(conversationText.includes('task.steps'), false);
   const screenshot = path.join(root, 'release-preview.png');
   await page.mouse.move(0, 0);
   await page.waitForTimeout(150);
@@ -283,8 +298,9 @@ test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, 
   await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'IDLE_VISIBLE');
 
-  await page.focus('#pet');
+  await page.focus('#sessionButton');
   await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'SESSION_ACTIVE');
   assert.equal(await page.evaluate(() => window.__floatingPetTest.emitCue()), false);
   await page.evaluate(() => window.__floatingPetTest.advanceClock(5100));
   assert.equal(await page.evaluate(() => window.__floatingPetTest.emitCue()), true);
@@ -351,7 +367,8 @@ test('desktop pet completes the Fake realtime audio path', { timeout: 45000 }, a
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.waitForSelector('#pet');
-    await page.click('#pet');
+    await page.focus('#sessionButton');
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'SESSION_ACTIVE');
     await page.click('#pet', { button: 'right' });
     await page.click('#contextSettings');
@@ -570,7 +587,8 @@ test('desktop pet turns two remote screen observations into one proactive nudge'
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.waitForSelector('#pet');
-    await page.click('#pet');
+    await page.focus('#sessionButton');
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.body.dataset.phase === 'SESSION_ACTIVE');
     await page.click('#pet', { button: 'right' });
     await page.click('#contextSettings');
@@ -612,6 +630,9 @@ test('desktop pet turns two remote screen observations into one proactive nudge'
       assert.equal(body.messages[0].content.some((part) => part.type === 'input_audio'), false);
     }
     assert.equal(await page.locator('#nudgeText').textContent(), '这个错误似乎重复出现，需要我一起看看吗？');
+    await page.click('#acceptNudge');
+    await page.waitForFunction(() => document.body.dataset.phase === 'ENGAGED');
+    assert.equal((await page.locator('#conversation').textContent()).includes('同一个本地测试错误重复出现'), true);
     assert.deepEqual(pageErrors, []);
   } finally {
     await app?.close().catch(() => undefined);
@@ -682,7 +703,8 @@ test('desktop pet keeps unsupported chat media out of the remote request', { tim
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.waitForSelector('#pet');
-    await page.click('#pet');
+    await page.focus('#sessionButton');
+    await page.keyboard.press('Enter');
     await page.click('#pet', { button: 'right' });
     await page.click('#contextSettings');
     await page.waitForFunction(() => document.querySelector('#screenSource').options.length > 1);

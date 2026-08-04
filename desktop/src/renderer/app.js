@@ -16,6 +16,7 @@
   let restoreFocus = null;
   let fakeClockOffsetMs = 0;
   let observations = [];
+  let latestObservationSummary = null;
   let cueTimer = null;
   let toastTimer = null;
   let captionTimer = null;
@@ -658,6 +659,7 @@
     clearTimeout(cueTimer);
     cueTimer = null;
     observations = [];
+    latestObservationSummary = null;
     cancelScreenAnalysis();
     cancelCapabilityRetry();
     messages.length = 0;
@@ -742,6 +744,9 @@
   function recordObservation(observation, { showPending = false, speakCue = false } = {}) {
     if (state.phase === PHASES.COOLDOWN && nowMs() >= state.cooldownUntilMs) state = transition(state, { type: 'EXPIRE' });
     if (state.phase !== PHASES.ACTIVE) return false;
+    if (typeof observation?.summary === 'string' && observation.summary.trim() && observation.summary.trim().length <= 160) {
+      latestObservationSummary = observation.summary.trim();
+    }
     observations.push(observation);
     observations = observations.slice(-3);
     const decision = decideNudge({
@@ -758,6 +763,10 @@
       if (showPending && observations.length === 1) showToast('已记录一次可观察线索，我再看看');
       return false;
     }
+    const matched = observations.findLast((item) => item.eventKey === decision.eventKey);
+    latestObservationSummary = typeof matched?.summary === 'string' && matched.summary.trim().length <= 160
+      ? matched.summary.trim()
+      : null;
     clearTimeout(toastTimer);
     $('toast').dataset.show = 'false';
     state = transition(state, { type: 'CUES_READY', eventKey: decision.eventKey });
@@ -776,11 +785,11 @@
 
   function emitCue() {
     return recordObservation({
-      eventKey: 'repeat-map-error',
+      eventKey: 'simulated-repeat-error',
       kind: 'repeated_error',
       source: 'screen',
       observedAtMs: nowMs(),
-      summary: '重复的 map 错误'
+      summary: '同一个错误重复出现'
     }, { showPending: true, speakCue: true });
   }
 
@@ -812,8 +821,11 @@
     setPanel('assist', pet);
     $('conversation').replaceChildren();
     messages.length = 0;
-    addMessage('assistant', 'task.steps 还不存在，所以 map 无法运行。先补上数组，再检查每项的 title。', false, 'local');
-    speak('task 的 steps 还不存在。先补上数组，再重新运行。');
+    const prompt = latestObservationSummary
+      ? `我注意到：${latestObservationSummary}。你想从哪里开始看？`
+      : '我看到一个重复线索，可以一起看看。';
+    addMessage('assistant', prompt, false, 'local');
+    speak(prompt);
     render();
   }
 
@@ -1433,8 +1445,17 @@
   function activatePet() {
     api.window.focus();
     if (!sessionActive()) startSession();
-    else if (state.phase === PHASES.ENGAGED) setPanel('assist', pet);
-    else showToast('陪伴中 · 右键可打开控制');
+    if (state.phase === PHASES.ACTIVE || state.phase === PHASES.COOLDOWN) {
+      state = transition(state, { type: 'ENGAGE' });
+      setPanel('assist', pet);
+      render();
+      return;
+    }
+    if (state.phase === PHASES.ENGAGED) {
+      setPanel('assist', pet);
+      return;
+    }
+    if (state.phase !== PHASES.NUDGE) showToast('陪伴中 · 右键可打开控制');
   }
 
   pet.addEventListener('pointerdown', async (event) => {
