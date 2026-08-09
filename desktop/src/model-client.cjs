@@ -140,8 +140,20 @@ function validateConfig(config, fetchImpl) {
   else if (path.endsWith('/v1')) url.pathname = `${path}/chat/completions`;
   else url.pathname = `${path}/v1/chat/completions`.replace(/^\/\//, '/');
 
+  let realtimeEndpoint = null;
+  if (config.realtimeEndpoint != null) {
+    try {
+      realtimeEndpoint = new URL(config.realtimeEndpoint);
+    } catch {
+      return null;
+    }
+    if (!['ws:', 'wss:'].includes(realtimeEndpoint.protocol) || realtimeEndpoint.username || realtimeEndpoint.password
+        || realtimeEndpoint.search || realtimeEndpoint.hash) return null;
+  }
+
   return {
     endpoint: url.toString(),
+    realtimeEndpoint: realtimeEndpoint?.toString() || null,
     model: config.model.trim(),
     token: config.token?.trim() || '',
     timeoutMs: config.timeoutMs,
@@ -237,11 +249,18 @@ function unavailableCapabilities(state, reason) {
   };
 }
 
-async function capabilities(config, fetchImpl = globalThis.fetch) {
-  const validConfig = validateConfig(config, fetchImpl);
-  if (!validConfig) return unavailableCapabilities('degraded', 'invalid_config');
-  const url = new URL(validConfig.endpoint);
-  url.pathname = url.pathname.replace(/\/v1\/chat\/completions\/?$/, '/health');
+function healthUrl(endpoint) {
+  const url = new URL(endpoint);
+  if (url.protocol === 'ws:') url.protocol = 'http:';
+  if (url.protocol === 'wss:') url.protocol = 'https:';
+  const pathname = url.pathname.replace(/\/+$/, '');
+  const suffix = ['/v1/chat/completions', '/v1/realtime', '/realtime', '/v1']
+    .find((candidate) => pathname.endsWith(candidate));
+  url.pathname = suffix ? `${pathname.slice(0, -suffix.length)}/health` : `${pathname}/health`;
+  return url;
+}
+
+async function probeCapabilities(validConfig, url) {
   const controller = new AbortController();
   let timedOut = false;
   let timer;
@@ -286,6 +305,27 @@ async function capabilities(config, fetchImpl = globalThis.fetch) {
   } catch {
     return unavailableCapabilities('degraded', 'invalid_json');
   }
+  if (payload?.status === 'ready'
+      && typeof payload?.model === 'string'
+      && payload.model.trim()
+      && payload.mode == null
+      && payload.capabilities == null) {
+    const isLegacyMinicpm = payload.model.trim().toLowerCase() === 'cpmo';
+    // ponytail: legacy cpmo health omits capability flags; keep Duplex disabled until advertised.
+    return {
+      state: 'chat',
+      mode: 'chat',
+      chatCompletions: true,
+      imageInput: isLegacyMinicpm,
+      chatAudioInput: isLegacyMinicpm,
+      realtime: false,
+      audioInput: false,
+      video: false,
+      audioOutput: false,
+      serviceFake: false,
+      reason: 'legacy_health'
+    };
+  }
   const status = ['ready', 'degraded', 'loading'].includes(payload?.status) ? payload.status : null;
   const mode = ['chat', 'duplex'].includes(payload?.mode) ? payload.mode : null;
   const advertised = payload?.capabilities;
@@ -309,10 +349,30 @@ async function capabilities(config, fetchImpl = globalThis.fetch) {
   };
   if (status !== 'ready') return { ...normalized, state: 'degraded' };
   if (mode === 'chat' && normalized.chatCompletions) return { ...normalized, state: 'chat' };
+  if (normalized.serviceFake) return { ...normalized, state: 'degraded' };
   if (mode === 'duplex' && normalized.realtime && normalized.audioInput && normalized.audioOutput) {
     return { ...normalized, state: 'duplex' };
   }
   return unavailableCapabilities('degraded', 'capability_mismatch');
+}
+
+async function capabilities(config, fetchImpl = globalThis.fetch) {
+  const validConfig = validateConfig(config, fetchImpl);
+  if (!validConfig) return unavailableCapabilities('degraded', 'invalid_config');
+  const chat = await probeCapabilities(validConfig, healthUrl(validConfig.endpoint));
+  if (!validConfig.realtimeEndpoint || chat.state !== 'chat') return chat;
+
+  const duplex = await probeCapabilities(validConfig, healthUrl(validConfig.realtimeEndpoint));
+  if (duplex.state !== 'duplex' || duplex.serviceFake) return chat;
+  return {
+    ...chat,
+    state: 'duplex',
+    mode: 'duplex',
+    realtime: true,
+    audioInput: true,
+    video: duplex.video,
+    audioOutput: true
+  };
 }
 
 async function chat(input, config, fetchImpl = globalThis.fetch) {

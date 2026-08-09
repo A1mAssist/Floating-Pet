@@ -291,12 +291,92 @@ test('reads and normalizes the service capability contract', async () => {
   assert.equal(request.options.signal instanceof AbortSignal, true);
 });
 
+test('merges verified Duplex health without dropping chat capabilities', async () => {
+  const calls = [];
+  const result = await capabilities({
+    ...config,
+    realtimeEndpoint: 'ws://127.0.0.1:18001/v1/realtime'
+  }, async (url) => {
+    calls.push(String(url));
+    return jsonResponse(String(url).includes(':18001')
+      ? {
+          status: 'ready',
+          mode: 'duplex',
+          fake: false,
+          capabilities: {
+            realtime: true,
+            audio_input_16k_f32: true,
+            video_jpeg: true,
+            audio_output_24k_f32: true
+          }
+        }
+      : {
+          status: 'ready',
+          mode: 'chat',
+          fake: false,
+          capabilities: {
+            chat_completions: true,
+            image_input: true,
+            audio_input_wav: true
+          }
+        });
+  });
+
+  assert.deepEqual(calls, [
+    'http://127.0.0.1:18000/health',
+    'http://127.0.0.1:18001/health'
+  ]);
+  assert.deepEqual(result, {
+    state: 'duplex',
+    mode: 'duplex',
+    chatCompletions: true,
+    imageInput: true,
+    chatAudioInput: true,
+    realtime: true,
+    audioInput: true,
+    video: true,
+    audioOutput: true,
+    serviceFake: false,
+    reason: null
+  });
+});
+
+test('fake or unavailable Duplex health leaves working chat available', async (t) => {
+  const chatHealth = {
+    status: 'ready',
+    mode: 'chat',
+    fake: false,
+    capabilities: { chat_completions: true, image_input: true, audio_input_wav: true }
+  };
+  const realtimeConfig = { ...config, realtimeEndpoint: 'ws://127.0.0.1:18001/v1/realtime' };
+  const cases = [
+    ['fake', async (url) => jsonResponse(String(url).includes(':18001') ? {
+      status: 'ready', mode: 'duplex', fake: true,
+      capabilities: { realtime: true, audio_input_16k_f32: true, audio_output_24k_f32: true }
+    } : chatHealth)],
+    ['network', async (url) => {
+      if (String(url).includes(':18001')) throw new Error('duplex offline');
+      return jsonResponse(chatHealth);
+    }]
+  ];
+  for (const [name, fetchImpl] of cases) {
+    await t.test(name, async () => {
+      const result = await capabilities(realtimeConfig, fetchImpl);
+      assert.equal(result.state, 'chat');
+      assert.equal(result.chatCompletions, true);
+      assert.equal(result.realtime, false);
+      assert.equal(result.audioOutput, false);
+    });
+  }
+});
+
 test('maps valid health responses to one product mode', async () => {
   const cases = [
     [{ status: 'ready', mode: 'chat', fake: false, capabilities: { chat_completions: true } }, 'chat'],
+    [{ status: 'ready', mode: 'chat', fake: true, capabilities: { chat_completions: true } }, 'chat'],
     [{ status: 'ready', mode: 'duplex', fake: true, capabilities: {
       realtime: true, audio_input_16k_f32: true, audio_output_24k_f32: true
-    } }, 'duplex'],
+    } }, 'degraded'],
     [{ status: 'degraded', mode: 'duplex', fake: false, capabilities: {}, error: { code: 'capability_missing' } }, 'degraded'],
     [{ status: 'ready', mode: 'chat', fake: false, capabilities: { chat_completions: false } }, 'degraded']
   ];
@@ -305,6 +385,27 @@ test('maps valid health responses to one product mode', async () => {
     assert.equal(result.state, state);
     if (payload.fake === true) assert.equal(result.serviceFake, true);
   }
+});
+
+test('accepts legacy cpmo health with chat, image, and WAV input only', async () => {
+  const result = await capabilities(config, async () => jsonResponse({
+    status: 'ready',
+    model: 'cpmo',
+    device: 'Ascend910'
+  }));
+  assert.deepEqual(result, {
+    state: 'chat',
+    mode: 'chat',
+    chatCompletions: true,
+    imageInput: true,
+    chatAudioInput: true,
+    realtime: false,
+    audioInput: false,
+    video: false,
+    audioOutput: false,
+    serviceFake: false,
+    reason: 'legacy_health'
+  });
 });
 
 test('capability failures are bounded and expose no endpoint details', async (t) => {

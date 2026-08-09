@@ -49,6 +49,14 @@ def make_jpeg(width=2, height=2):
 
 
 class ProtocolTest(unittest.TestCase):
+    def test_device_selection_is_bounded(self):
+        self.assertEqual(server.selected_device("npu:0"), "npu:0")
+        self.assertEqual(server.selected_device(" npu:1 "), "npu:1")
+        with mock.patch.dict(os.environ, {"MINICPM_DEVICE": "npu:1"}):
+            self.assertEqual(server.selected_device(), "npu:1")
+        with self.assertRaisesRegex(ValueError, "MINICPM_DEVICE"):
+            server.selected_device("cpu")
+
     def test_npu_istft_falls_back_only_for_verified_nola_error(self):
         class Tensor:
             def __init__(self, device):
@@ -101,6 +109,93 @@ class ProtocolTest(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "out of memory"):
             torch_module.istft(input_tensor, 16)
         input_tensor.cpu.assert_not_called()
+
+    def test_s3tokenizer_prompt_loader_uses_soundfile(self):
+        import numpy as np
+
+        s3tokenizer = types.ModuleType("s3tokenizer")
+        soundfile = types.ModuleType("soundfile")
+        soundfile.read = mock.Mock(return_value=(np.asarray([0.25, -0.5], dtype=np.float32), 16_000))
+        torch = types.ModuleType("torch")
+        torch.from_numpy = mock.Mock(side_effect=lambda value: value)
+        with mock.patch.dict(sys.modules, {
+                "s3tokenizer": s3tokenizer,
+                "soundfile": soundfile,
+                "torch": torch,
+            }):
+            server._patch_s3tokenizer_load_audio()
+            result = s3tokenizer.load_audio("prompt.wav")
+
+        soundfile.read.assert_called_once_with("prompt.wav", dtype="float32", always_2d=False)
+        self.assertEqual(result.tolist(), [0.25, -0.5])
+        self.assertTrue(s3tokenizer.load_audio._minicpmo_soundfile)
+
+    def test_torchaudio_prompt_loader_uses_soundfile(self):
+        import numpy as np
+
+        torchaudio = types.ModuleType("torchaudio")
+        torchaudio.load = mock.Mock()
+        soundfile = types.ModuleType("soundfile")
+        soundfile.read = mock.Mock(return_value=(np.asarray([[0.25, -0.5]], dtype=np.float32), 16_000))
+        torch = types.ModuleType("torch")
+        torch.from_numpy = mock.Mock(side_effect=lambda value: value)
+        with mock.patch.dict(sys.modules, {
+                "torchaudio": torchaudio,
+                "soundfile": soundfile,
+                "torch": torch,
+            }):
+            server._patch_torchaudio_load()
+            audio, sample_rate = torchaudio.load("prompt.wav", channels_first=False, backend="soundfile")
+
+        soundfile.read.assert_called_once_with(
+            "prompt.wav",
+            dtype="float32",
+            always_2d=True,
+            start=0,
+            frames=-1,
+        )
+        self.assertEqual(sample_rate, 16_000)
+        self.assertEqual(audio.tolist(), [[0.25, -0.5]])
+        self.assertTrue(torchaudio.load._minicpmo_soundfile)
+
+    def test_duplex_hift_cpu_patch_keeps_stream_values_on_the_model_device(self):
+        class Tensor:
+            def __init__(self, device):
+                self.device = types.SimpleNamespace(type=device)
+
+            def cpu(self):
+                return Tensor("cpu")
+
+            def to(self, device):
+                return Tensor(device.type)
+
+        class Hift:
+            def __init__(self):
+                self.cpu_calls = 0
+                self.forward_calls = []
+
+            def cpu(self):
+                self.cpu_calls += 1
+                return self
+
+            def eval(self):
+                return self
+
+            def forward(self, speech_feat, cache_source):
+                self.forward_calls.append((speech_feat, cache_source))
+                return Tensor("cpu"), Tensor("cpu")
+
+        hift = Hift()
+        model = types.SimpleNamespace(model=types.SimpleNamespace(
+            tts=types.SimpleNamespace(audio_tokenizer=types.SimpleNamespace(hift=hift))
+        ))
+        server._move_duplex_hift_to_cpu(model)
+        speech, source = hift.forward(Tensor("npu"), Tensor("npu"))
+        server._move_duplex_hift_to_cpu(model)
+
+        self.assertEqual(hift.cpu_calls, 1)
+        self.assertEqual([tensor.device.type for tensor in hift.forward_calls[0]], ["cpu", "cpu"])
+        self.assertEqual((speech.device.type, source.device.type), ("npu", "npu"))
 
     @unittest.skipIf(Image is None, "Pillow is not installed")
     def test_normalizes_text_and_one_image(self):
@@ -227,18 +322,49 @@ class ProtocolTest(unittest.TestCase):
                 self.calls.append(kwargs)
 
         model = Model()
-        backend = server.DuplexBackend(model, "prompt.wav")
-        backend.prepare({"system_prompt": "  本地助手  "}, "video")
-        self.assertEqual(model.calls[0], {
-            "prefix_system_prompt": "<|im_start|>system\n本地助手",
-            "suffix_system_prompt": "<|im_end|>",
-            "ref_audio": None,
-            "prompt_wav_path": "prompt.wav",
-            "mode": "omni",
-        })
-        backend.prepare({}, "audio")
+        torch = types.ModuleType("torch")
+        torch.npu = types.SimpleNamespace(set_device=mock.Mock())
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            backend = server.DuplexBackend(model, "prompt.wav", "npu:1")
+            backend.prepare({"system_prompt": "  本地助手  "}, "video")
+            self.assertEqual(model.calls[0], {
+                "prefix_system_prompt": "<|im_start|>system\n本地助手",
+                "suffix_system_prompt": "<|im_end|>",
+                "ref_audio": None,
+                "prompt_wav_path": "prompt.wav",
+                "mode": "omni",
+            })
+            backend.prepare({}, "audio")
         self.assertEqual(model.calls[1]["mode"], "audio")
         self.assertTrue(model.calls[1]["prefix_system_prompt"].startswith("<|im_start|>system\n"))
+        self.assertEqual(torch.npu.set_device.call_args_list, [mock.call("npu:1"), mock.call("npu:1")])
+
+    def test_duplex_backend_reselects_device_for_every_worker_call(self):
+        class Model:
+            def prepare(self, **kwargs):
+                return None
+
+            def streaming_prefill(self, **kwargs):
+                return None
+
+            def streaming_generate(self, **kwargs):
+                return {}
+
+            def set_session_stop(self):
+                return None
+
+        torch = types.ModuleType("torch")
+        torch.npu = types.SimpleNamespace(set_device=mock.Mock())
+        with mock.patch.dict(sys.modules, {"torch": torch}):
+            backend = server.DuplexBackend(Model(), "prompt.wav", "npu:1")
+            backend._activate_device()
+        torch.npu.set_device.assert_called_once_with("npu:1")
+
+        with mock.patch.object(backend, "_activate_device") as activate_device:
+            backend.prepare({}, "audio")
+            backend.process({"audio": struct.pack("<f", 0.0), "video_frames": [], "max_slice_nums": 1})
+            backend.stop()
+        self.assertEqual(activate_device.call_count, 3)
 
     def test_duplex_loader_validates_prompt_wav_before_model_load(self):
         duplex_class = mock.Mock()
@@ -303,6 +429,15 @@ class ProtocolTest(unittest.TestCase):
                 return None
 
         loaded = LoadedModel()
+        loaded.model = types.SimpleNamespace(tts=types.SimpleNamespace(audio_tokenizer=types.SimpleNamespace(
+            hift=types.SimpleNamespace(
+                cpu=lambda: None,
+                eval=lambda: None,
+                forward=lambda speech_feat, cache_source=None: (speech_feat, cache_source),
+            )
+        )))
+        loaded.model.tts.audio_tokenizer.hift.cpu = lambda: loaded.model.tts.audio_tokenizer.hift
+        loaded.model.tts.audio_tokenizer.hift.eval = lambda: loaded.model.tts.audio_tokenizer.hift
         duplex_class = mock.Mock()
         duplex_class.from_pretrained.return_value = loaded
         get_class = mock.Mock(return_value=duplex_class)
@@ -314,6 +449,7 @@ class ProtocolTest(unittest.TestCase):
         transfer_to_npu = types.ModuleType("torch_npu.contrib.transfer_to_npu")
         dynamic_utils.get_class_from_dynamic_module = get_class
         torch.istft = lambda input_tensor, *args, **kwargs: input_tensor
+        torch.npu = types.SimpleNamespace(set_device=mock.Mock(), synchronize=mock.Mock())
         transformers.dynamic_module_utils = dynamic_utils
         torch_npu.contrib = torch_npu_contrib
         torch_npu_contrib.transfer_to_npu = transfer_to_npu
@@ -321,7 +457,11 @@ class ProtocolTest(unittest.TestCase):
             prompt_path = os.path.join(temp_dir, "prompt.wav")
             with open(prompt_path, "wb") as prompt:
                 prompt.write(make_wav(sample_rate=22_050, channels=2, frames=22_050))
-            with mock.patch.dict(os.environ, {"MINICPM_PROMPT_WAV": prompt_path, "MINICPM_ATTN": "eager"}), \
+            with mock.patch.dict(os.environ, {
+                    "MINICPM_PROMPT_WAV": prompt_path,
+                    "MINICPM_ATTN": "eager",
+                    "MINICPM_DEVICE": "npu:1",
+                }), \
                     mock.patch.dict(sys.modules, {
                         "transformers": transformers,
                         "transformers.dynamic_module_utils": dynamic_utils,
@@ -338,12 +478,15 @@ class ProtocolTest(unittest.TestCase):
         )
         duplex_class.from_pretrained.assert_called_once_with(
             server.MODEL_DIR,
-            device="npu:0",
+            device="npu:1",
             generate_audio=True,
             attn_implementation="eager",
         )
         self.assertIs(backend.model, loaded)
         self.assertEqual(backend.prompt_wav_path, prompt_path)
+        self.assertEqual(backend.device, "npu:1")
+        torch.npu.set_device.assert_called_once_with("npu:1")
+        torch.npu.synchronize.assert_called_once_with()
 
 
 @unittest.skipIf(TestClient is None, "FastAPI test dependencies are not installed")

@@ -33,8 +33,10 @@ function sshProfile(overrides = {}) {
     sshConfig: 'ssh_config',
     sshTarget: 'competition-a',
     localPort: 18000,
+    realtimeLocalPort: 18000,
     remoteHost: '127.0.0.1',
     remotePort: 8000,
+    realtimeRemotePort: 8001,
     remoteRoot: '~/MiniCPM-o',
     ...overrides
   };
@@ -79,6 +81,8 @@ test('normalizes supported direct and SSH profiles without preserving secrets', 
 test('rejects invalid port bounds and unsafe SSH arguments', () => {
   assert.equal(normalizeProfile(sshProfile({ localPort: 0 })), null);
   assert.equal(normalizeProfile(sshProfile({ remotePort: 65536 })), null);
+  assert.equal(normalizeProfile(sshProfile({ realtimeRemotePort: 0 })), null);
+  assert.equal(normalizeProfile(sshProfile({ realtimeUrl: 'ws://127.0.0.1/v1/realtime' })), null);
   assert.equal(normalizeProfile(sshProfile({ sshConfig: '../ssh_config' })), null);
   assert.equal(normalizeProfile(sshProfile({ sshTarget: '-oProxyCommand=bad' })), null);
   assert.equal(normalizeProfile(sshProfile({ sshTarget: '-Ffoo@host' })), null);
@@ -90,6 +94,12 @@ test('rejects invalid port bounds and unsafe SSH arguments', () => {
   assert.equal(normalizeProfile(sshProfile({ remoteRoot: '~' })), null);
   assert.equal(normalizeProfile(sshProfile({ remoteRoot: '~/MiniCPM-o/' })).remoteRoot, '~/MiniCPM-o');
   assert.equal(normalizeProfile(directProfile({ httpBase: 'http://127.0.0.1:0' })), null);
+});
+
+test('old SSH profiles reuse the chat remote port for realtime', () => {
+  const legacy = sshProfile();
+  delete legacy.realtimeRemotePort;
+  assert.equal(normalizeProfile(legacy).realtimeRemotePort, legacy.remotePort);
 });
 
 test('SSH profile supports optional FRP without an executable override', () => {

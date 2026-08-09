@@ -121,18 +121,23 @@ function normalizeProfile(value) {
   const sshTarget = boundedText(value.sshTarget, 320);
   const remoteHost = boundedText(value.remoteHost, 253);
   const remoteRoot = normalizeRemoteRoot(value.remoteRoot);
+  const realtimeLocalPort = Number(new URL(realtimeUrl).port);
+  const realtimeRemotePort = value.realtimeRemotePort == null ? value.remotePort : value.realtimeRemotePort;
   if (!credentialDir || !sshConfig || !sshTarget || !remoteHost || remoteRoot === false) return null;
   if (sshTarget.startsWith('-') || !/^(?:[A-Za-z0-9._-]{1,64}@)?[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/.test(sshTarget)) return null;
   if (!/^[A-Za-z0-9](?:[A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$/.test(remoteHost)) return null;
-  if (!validPort(value.localPort) || !validPort(value.remotePort)) return null;
+  if (!validPort(value.localPort) || !validPort(value.remotePort)
+      || !validPort(realtimeLocalPort) || !validPort(realtimeRemotePort)) return null;
 
   Object.assign(profile, {
     credentialDir,
     sshConfig,
     sshTarget,
     localPort: value.localPort,
+    realtimeLocalPort,
     remoteHost,
     remotePort: value.remotePort,
+    realtimeRemotePort,
     remoteRoot
   });
   const hasFrpcConfig = value.frpcConfig != null;

@@ -88,6 +88,13 @@ def selected_mode(value: str | None = None) -> str:
     return mode
 
 
+def selected_device(value: str | None = None) -> str:
+    device = (value or os.environ.get("MINICPM_DEVICE", "npu:0")).strip().lower()
+    if device not in {"npu:0", "npu:1"}:
+        raise ValueError("MINICPM_DEVICE must be npu:0 or npu:1")
+    return device
+
+
 def _env_flag(name: str, default: bool = False) -> bool:
     value = os.environ.get(name)
     if value is None:
@@ -379,10 +386,18 @@ class FakeDuplexBackend:
 class DuplexBackend:
     """Adapter for the verified MiniCPMODuplex methods only."""
 
-    def __init__(self, model: Any, prompt_wav_path: str) -> None:
+    def __init__(self, model: Any, prompt_wav_path: str, device: str) -> None:
         self.model = model
         self.prompt_wav_path = prompt_wav_path
+        self.device = selected_device(device)
         self.prepared = False
+
+    def _activate_device(self) -> None:
+        # asyncio.to_thread uses worker-local NPU defaults; third-party .cuda()
+        # calls must follow the model loaded on this device.
+        import torch
+
+        torch.npu.set_device(self.device)
 
     def prepare(self, payload: dict[str, Any], mode: str = "audio") -> None:
         # These arguments are part of the inspected Ascend revision.  Do not
@@ -393,6 +408,7 @@ class DuplexBackend:
         if mode not in {"audio", "video"}:
             raise ValueError("mode must be audio or video")
         system_prompt = system_prompt.strip() or "Streaming Duplex Conversation! You are a helpful assistant."
+        self._activate_device()
         self.model.prepare(
             prefix_system_prompt=f"<|im_start|>system\n{system_prompt}",
             suffix_system_prompt="<|im_end|>",
@@ -405,6 +421,7 @@ class DuplexBackend:
     def process(self, request: dict[str, Any]) -> dict[str, Any]:
         if not self.prepared:
             raise RuntimeError("backend session is not prepared")
+        self._activate_device()
         from PIL import Image
 
         frames = []
@@ -431,6 +448,7 @@ class DuplexBackend:
         stop = getattr(self.model, "set_session_stop", None)
         if not callable(stop):
             raise CapabilityMissing("MiniCPMODuplex.set_session_stop is unavailable")
+        self._activate_device()
         stop()
         self.prepared = False
 
@@ -441,6 +459,8 @@ def _load_chat_model() -> Any:
         import torch_npu  # noqa: F401
         from transformers import AutoModel
 
+        device = selected_device()
+        torch.npu.set_device(device)
         model = AutoModel.from_pretrained(
             MODEL_DIR,
             trust_remote_code=True,
@@ -448,7 +468,7 @@ def _load_chat_model() -> Any:
             low_cpu_mem_usage=True,
             _attn_implementation=os.environ.get("MINICPM_ATTN", "eager"),
         )
-        model.eval().to("npu:0")
+        model.eval().to(device)
         torch.npu.synchronize()
         return model
     except Exception as exc:
@@ -504,6 +524,95 @@ def _patch_npu_istft(torch_module: Any) -> None:
     torch_module.istft = npu_safe_istft
 
 
+def _patch_s3tokenizer_load_audio() -> None:
+    """Keep prompt WAV loading independent of torchaudio's TorchCodec extra."""
+    try:
+        import s3tokenizer
+    except ModuleNotFoundError:
+        return
+    if getattr(getattr(s3tokenizer, "load_audio", None), "_minicpmo_soundfile", False) is True:
+        return
+
+    def load_audio(file_path: str, sr: int = 16_000) -> Any:
+        import numpy as np
+        import soundfile as sf
+        import torch
+
+        audio, sample_rate = sf.read(file_path, dtype="float32", always_2d=False)
+        if getattr(audio, "ndim", 0) > 1:
+            audio = audio.mean(axis=1)
+        if getattr(audio, "ndim", 0) != 1 or not len(audio):
+            raise ValueError("prompt WAV contains no audio")
+        if sample_rate != sr:
+            import librosa
+
+            audio = librosa.resample(y=audio, orig_sr=sample_rate, target_sr=sr)
+        return torch.from_numpy(np.asarray(audio, dtype=np.float32).copy())
+
+    load_audio._minicpmo_soundfile = True
+    s3tokenizer.load_audio = load_audio
+
+
+def _patch_torchaudio_load() -> None:
+    """Keep the Duplex prompt cache independent of torchaudio's TorchCodec extra."""
+    try:
+        import torchaudio
+    except ModuleNotFoundError:
+        return
+    if getattr(torchaudio.load, "_minicpmo_soundfile", False) is True:
+        return
+
+    def load(
+        file_path: str,
+        frame_offset: int = 0,
+        num_frames: int = -1,
+        normalize: bool = True,
+        channels_first: bool = True,
+        format: str | None = None,
+        buffer_size: int = 4096,
+        backend: str | None = None,
+    ) -> tuple[Any, int]:
+        del normalize, format, buffer_size, backend
+        import soundfile as sf
+        import torch
+
+        audio, sample_rate = sf.read(
+            file_path,
+            dtype="float32",
+            always_2d=True,
+            start=frame_offset,
+            frames=num_frames,
+        )
+        return torch.from_numpy((audio.T if channels_first else audio).copy()), sample_rate
+
+    load._minicpmo_soundfile = True
+    torchaudio.load = load
+
+
+def _move_duplex_hift_to_cpu(model: Any) -> None:
+    """Run the Ascend-incompatible HifiGAN stage on CPU, not a substitute TTS."""
+    try:
+        hift = model.model.tts.audio_tokenizer.hift
+    except AttributeError as exc:
+        raise CapabilityMissing("MiniCPMODuplex HifiGAN vocoder is unavailable") from exc
+    if getattr(hift, "_minicpmo_cpu_hift", False) is True:
+        return
+    original_forward = hift.forward
+    if not callable(original_forward) or not callable(getattr(hift, "cpu", None)):
+        raise CapabilityMissing("MiniCPMODuplex HifiGAN vocoder is unavailable")
+    hift.cpu().eval()
+
+    def cpu_forward(speech_feat: Any, cache_source: Any = None) -> tuple[Any, Any]:
+        if cache_source is None:
+            speech, source = original_forward(speech_feat.cpu())
+        else:
+            speech, source = original_forward(speech_feat.cpu(), cache_source.cpu())
+        return speech.to(speech_feat.device), source.to(speech_feat.device)
+
+    hift.forward = cpu_forward
+    hift._minicpmo_cpu_hift = True
+
+
 def _load_duplex_backend() -> DuplexBackend:
     prompt_wav_path = os.environ.get("MINICPM_PROMPT_WAV", "").strip()
     if not prompt_wav_path or not os.path.isfile(prompt_wav_path):
@@ -517,7 +626,11 @@ def _load_duplex_backend() -> DuplexBackend:
         import torch_npu.contrib.transfer_to_npu  # noqa: F401
         from transformers.dynamic_module_utils import get_class_from_dynamic_module
 
+        device = selected_device()
+        torch.npu.set_device(device)
         _patch_npu_istft(torch)
+        _patch_s3tokenizer_load_audio()
+        _patch_torchaudio_load()
         duplex_class = get_class_from_dynamic_module(
             "modeling_minicpmo.MiniCPMODuplex",
             MODEL_DIR,
@@ -525,14 +638,16 @@ def _load_duplex_backend() -> DuplexBackend:
         )
         model = duplex_class.from_pretrained(
             MODEL_DIR,
-            device="npu:0",
+            device=device,
             generate_audio=True,
             attn_implementation=os.environ.get("MINICPM_ATTN", "eager"),
         )
+        _move_duplex_hift_to_cpu(model)
         for method in ("prepare", "streaming_prefill", "streaming_generate", "set_session_stop"):
             if not callable(getattr(model, method, None)):
                 raise CapabilityMissing(f"MiniCPMODuplex.{method} is unavailable")
-        return DuplexBackend(model, prompt_wav_path)
+        torch.npu.synchronize()
+        return DuplexBackend(model, prompt_wav_path, device)
     except CapabilityMissing:
         raise
     except Exception as exc:
@@ -652,6 +767,7 @@ def create_app(
     from fastapi import FastAPI, HTTPException, WebSocketDisconnect
 
     selected = selected_mode(mode)
+    device = selected_device()
     use_fake_duplex = _env_flag("MINICPM_FAKE_DUPLEX") if fake_duplex is None else fake_duplex
     use_background_load = not _env_flag("MINICPM_PROTOCOL_TEST") if background_load is None else background_load
     state: dict[str, Any] = {
@@ -679,12 +795,12 @@ def create_app(
         try:
             if selected == "chat":
                 model = _load_chat_model()
-                state["device"] = "npu:0"
+                state["device"] = device
                 state["loaded_at"] = int(time.time())
                 state["model"] = model
             else:
                 backend = _load_duplex_backend()
-                state["device"] = "npu:0"
+                state["device"] = device
                 state["loaded_at"] = int(time.time())
                 state["backend"] = backend
         except CapabilityMissing as exc:

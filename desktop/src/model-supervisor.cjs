@@ -545,12 +545,19 @@ function createSupervisor(options = {}) {
       spawnPersistent(attempt, 'frpc', files.frpc, ['-c', files.frpcConfig], { cwd: profile.credentialDir });
       await waitForPort(attempt, profile.visitorPort);
     }
+    const forwards = [
+      '-L', `${profile.localPort}:${profile.remoteHost}:${profile.remotePort}`
+    ];
+    const realtimeForward = `${profile.realtimeLocalPort}:${profile.remoteHost}:${profile.realtimeRemotePort}`;
+    if (realtimeForward !== `${profile.localPort}:${profile.remoteHost}:${profile.remotePort}`) {
+      forwards.push('-L', realtimeForward);
+    }
     spawnPersistent(attempt, 'tunnel', files.ssh, [
       '-F', files.sshConfig,
       '-o', 'BatchMode=yes',
       '-o', 'ExitOnForwardFailure=yes',
       '-N',
-      '-L', `${profile.localPort}:${profile.remoteHost}:${profile.remotePort}`,
+      ...forwards,
       '--',
       profile.sshTarget
     ], { cwd: profile.credentialDir });

@@ -111,7 +111,7 @@ function sshProfile(credentialDir, overrides = {}) {
     transport: 'ssh',
     desiredMode: 'chat',
     httpBase: 'http://127.0.0.1:18000',
-    realtimeUrl: 'ws://127.0.0.1:18000/v1/realtime',
+    realtimeUrl: 'ws://127.0.0.1:18001/v1/realtime',
     model: 'cpmo',
     credentialDir,
     sshConfig: 'ssh_config',
@@ -119,6 +119,7 @@ function sshProfile(credentialDir, overrides = {}) {
     localPort: 18000,
     remoteHost: '127.0.0.1',
     remotePort: 8000,
+    realtimeRemotePort: 8001,
     remoteRoot: null,
     ...overrides
   });
@@ -153,6 +154,13 @@ test('ssh profile reaches ready after forwarding and chat health', async (t) => 
   assert.equal(supervisor.getState().health.mode, 'chat');
   assert.equal(spawnImpl.children.length, 1);
   assert.equal(spawnImpl.children[0].spawnOptions.cwd, directory);
+  const forwardIndexes = spawnImpl.children[0].args
+    .map((value, index) => value === '-L' ? index : -1)
+    .filter((index) => index >= 0);
+  assert.deepEqual(forwardIndexes.map((index) => spawnImpl.children[0].args[index + 1]), [
+    '18000:127.0.0.1:8000',
+    '18001:127.0.0.1:8001'
+  ]);
   assert.deepEqual(spawnImpl.children[0].args.slice(-2), ['--', 'competition-a']);
   await supervisor.stop();
   assert.equal(spawnImpl.children.every((child) => child.killed), true);

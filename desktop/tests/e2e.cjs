@@ -516,6 +516,14 @@ test('desktop pet completes the Fake realtime audio path', { timeout: 45000 }, a
     const pageErrors = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
     await page.waitForSelector('#pet');
+    await page.evaluate(() => {
+      const original = window.speechSynthesis.speak.bind(window.speechSynthesis);
+      window.__speechSpeakCalls = 0;
+      window.speechSynthesis.speak = (...args) => {
+        window.__speechSpeakCalls += 1;
+        return original(...args);
+      };
+    });
     await page.focus('#sessionButton');
     await page.keyboard.press('Enter');
     await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'SESSION_ACTIVE');
@@ -571,11 +579,13 @@ test('desktop pet completes the Fake realtime audio path', { timeout: 45000 }, a
     await page.waitForFunction(() => document.querySelector('#nudgeBubble').dataset.open === 'true');
     await page.click('#acceptNudge');
     await page.waitForFunction(() => window.__floatingPetTest.getState().phase === 'ENGAGED');
+    const speechCallsBeforeRealtime = await page.evaluate(() => window.__speechSpeakCalls);
     const audioOnlyVisualCalls = await page.evaluate(() => window.__floatingPetTest.getState().visualCaptureCalls);
     await page.click('#realtimeToggle');
     await page.waitForFunction(() => window.__floatingPetTest.getState().realtimeActive === true, null, { timeout: 8000 });
     await page.waitForFunction(() => document.querySelector('#conversation').textContent.includes('local realtime demo response'), null, { timeout: 8000 });
     await page.waitForFunction(() => window.__floatingPetTest.getState().realtimePlaybackAccepted > 0, null, { timeout: 8000 });
+    assert.equal(await page.evaluate(() => window.__speechSpeakCalls), speechCallsBeforeRealtime);
     const realtimeButton = await page.locator('#realtimeToggle').evaluate((button) => ({
       background: getComputedStyle(button).backgroundColor,
       color: getComputedStyle(button).color,

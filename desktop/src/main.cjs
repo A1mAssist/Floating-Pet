@@ -101,10 +101,14 @@ function isRecord(value) {
 }
 
 function currentModelConfig(signal = null) {
-  if (!activeProfile) return signal ? { ...LEGACY_MODEL_CONFIG, signal } : LEGACY_MODEL_CONFIG;
+  if (!activeProfile) {
+    const config = { ...LEGACY_MODEL_CONFIG, realtimeEndpoint: LEGACY_REALTIME_CONFIG.endpoint };
+    return signal ? { ...config, signal } : config;
+  }
   const endpoints = getModelEndpoints(activeProfile);
   return {
     endpoint: endpoints.endpoint,
+    realtimeEndpoint: endpoints.realtimeEndpoint,
     model: endpoints.model,
     token: endpoints.token,
     timeoutMs: LEGACY_MODEL_CONFIG.timeoutMs,
