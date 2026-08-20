@@ -51,7 +51,7 @@ Only durable state is stored:
 
 The renderer calculates remaining time from `Date.now()`, so sleep and throttling do not cause drift. On restart, a running timer is reconstructed from `endsAt`; an expired timer transitions to completion. Interval handles are never persisted.
 
-Completion reuses the existing `timer-done` observation and task-complete nudge path. The existing voice setting controls model-generated spoken feedback, and DND/presentation mode continues to suppress speech. No new OS notification permission or background service is added.
+Completion clears durable state and shows a local completion toast/caption even when no session is active. When a session is active it also reuses the existing `timer-done` observation and task-complete nudge path. The existing voice setting controls model-generated spoken feedback, and DND/presentation mode continues to suppress speech. No new OS notification permission or background service is added.
 
 ## Data flow and boundaries
 
@@ -91,4 +91,3 @@ Run the repository's existing check, unit, service, integration, and Electron E2
 - memory injection into Duplex sessions or proactive screen analysis;
 - OS notifications, a background timer process, or a new database;
 - synchronization across devices.
-
