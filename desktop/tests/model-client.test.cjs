@@ -441,13 +441,14 @@ test('Fake Adapter advertises both local interaction paths', () => {
 test('rejects invalid input before fetch with one stable error', async () => {
   let calls = 0;
   const fetchImpl = async () => { calls += 1; return jsonResponse({}); };
-  const tooMany = Array.from({ length: 7 }, () => ({ role: 'user', content: 'x' }));
+  const tooMany = Array.from({ length: 8 }, () => ({ role: 'user', content: 'x' }));
   const oversizedImage = `data:image/png;base64,${'A'.repeat(7_000_000)}`;
   const cases = [
     null,
     { messages: [], turn: 1 },
     { messages: tooMany, turn: 1 },
     { messages: [{ role: 'system', content: 'x' }], turn: 1 },
+    { messages: [{ role: 'user', content: 'x' }, { role: 'system', content: 'x' }], turn: 1 },
     { messages: [{ role: 'assistant', content: 'x' }], turn: 1 },
     { messages: [{ role: 'user', content: '' }], turn: 1 },
     { messages: [{ role: 'user', content: 'x'.repeat(4001) }], turn: 1 },
@@ -463,6 +464,19 @@ test('rejects invalid input before fetch with one stable error', async () => {
     assert.deepEqual(await chat(value, config, fetchImpl), { ok: false, code: 'invalid_input', message: '模型请求无效。' });
   }
   assert.equal(calls, 0);
+});
+
+test('accepts one bounded system memory message before user chat', async () => {
+  let body;
+  const result = await chat({
+    messages: [{ role: 'system', content: '已确认记忆：叫我小林' }, { role: 'user', content: '你好' }],
+    turn: 1
+  }, config, async (_url, options) => {
+    body = JSON.parse(options.body);
+    return jsonResponse({ choices: [{ message: { content: '你好，小林' } }] });
+  });
+  assert.equal(result.ok, true);
+  assert.equal(body.messages[0].role, 'system');
 });
 
 test('rejects invalid config without exposing its values', async () => {

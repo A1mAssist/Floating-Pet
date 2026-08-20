@@ -21,6 +21,80 @@ async function waitForRealtimeAppend(page, predicate, timeoutMs = 8000) {
   return value;
 }
 
+test('desktop pet confirms memories and restores focus timer state', { timeout: 60000, concurrency: false }, async () => {
+  let app;
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'floating-pet-memory-timer-e2e-'));
+  const launch = () => electron.launch({
+    executablePath: require('electron'),
+    args: [root, `--user-data-dir=${userDataDir}`, '--fake-model', '--test-mode'],
+    env: { ...process.env, ELECTRON_DISABLE_SECURITY_WARNINGS: 'true' }
+  });
+  try {
+    app = await launch();
+    let page = await app.firstWindow();
+    await page.waitForSelector('#pet');
+    await page.click('#pet');
+    await page.waitForFunction(() => document.querySelector('#assistCard').dataset.open === 'true');
+
+    await page.fill('#messageInput', '普通聊天不能保存');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelectorAll('.message.assistant').length >= 1);
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.memories.length === 0);
+
+    await page.fill('#messageInput', '记住：称呼：叫我小林');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('#memoryConfirm').hidden === false);
+    assert.equal(await page.locator('#conversation').textContent().then((text) => text.includes('记住：称呼：叫我小林')), false);
+    await page.click('#confirmMemory');
+    await page.waitForFunction(async () => {
+      const result = await window.pet.settings.get();
+      return result.settings.memories.length === 1 && result.settings.memories[0].text === '叫我小林';
+    });
+
+    await page.click('#settingsButton');
+    await page.waitForFunction(() => document.querySelector('#settingsPanel').dataset.open === 'true');
+    await page.locator('#memoryList input').fill('叫我林同学');
+    await page.locator('#memoryList button[data-action="save-memory"]').click();
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.memories[0]?.text === '叫我林同学');
+
+    await page.click('#closeSettings');
+    await page.waitForFunction(() => document.querySelector('#settingsPanel').dataset.open === 'false');
+    await page.click('#pet');
+    await page.waitForFunction(() => document.querySelector('#assistCard').dataset.open === 'true');
+    await page.fill('#focusDuration', '5');
+    await page.click('#focusStart');
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.focusTimer?.state === 'running');
+    await page.waitForFunction(() => document.querySelector('#focusPause').disabled === false);
+    await page.click('#focusPause');
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.focusTimer?.state === 'paused');
+
+    await app.close();
+    app = await launch();
+    page = await app.firstWindow();
+    await page.waitForSelector('#pet');
+    await page.waitForFunction(async () => {
+      const result = await window.pet.settings.get();
+      return result.settings.memories[0]?.text === '叫我林同学' && result.settings.focusTimer?.state === 'paused';
+    });
+    await page.click('#pet');
+    await page.waitForFunction(() => document.querySelector('#assistCard').dataset.open === 'true');
+    assert.equal(await page.locator('#focusTimerStatus').textContent(), '已暂停');
+    await page.click('#focusPause');
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.focusTimer?.state === 'running');
+    await page.evaluate(() => window.__floatingPetTest.advanceClock(5 * 60 * 1000));
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.focusTimer === null);
+    await page.waitForFunction(() => document.querySelector('#focusTimerStatus').textContent === '已完成');
+
+    await page.click('#settingsButton');
+    await page.waitForFunction(() => document.querySelector('#settingsPanel').dataset.open === 'true');
+    await page.locator('#memoryList button[data-action="delete-memory"]').click();
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.memories.length === 0);
+  } finally {
+    await app?.close().catch(() => undefined);
+    fs.rmSync(userDataDir, { recursive: true, force: true });
+  }
+});
+
 test('desktop pet completes the Fake Adapter preview flow', { timeout: 90000 }, async () => {
   let app;
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'floating-pet-e2e-'));
@@ -415,6 +489,7 @@ test('desktop pet restores only safe settings after relaunch', { timeout: 60000 
     app = await launch();
     let page = await app.firstWindow();
     await page.waitForSelector('#pet');
+    await page.waitForFunction(() => Boolean(window.__floatingPetTest?.openSettings));
     await page.evaluate(() => window.__floatingPetTest.openSettings());
     await page.waitForFunction(() => document.querySelector('#profileSelect').value === 'direct-a');
     assert.equal(await page.locator('#connectionStatus').textContent(), 'Fake Adapter');
@@ -900,11 +975,17 @@ test('desktop pet keeps unsupported chat media out of the remote request', { tim
     await page.evaluate(() => document.querySelector('#simulateCue').click());
     await page.waitForFunction(() => document.querySelector('#nudgeBubble').dataset.open === 'true', null, { timeout: 8000 });
     await page.click('#acceptNudge');
+    await page.fill('#messageInput', '记住：称呼：叫我小林');
+    await page.keyboard.press('Enter');
+    await page.click('#confirmMemory');
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.memories[0]?.text === '叫我小林');
     await page.fill('#messageInput', '只测试文字');
     await page.click('#sendMessage');
     await page.waitForFunction(() => document.querySelector('#conversation').textContent.includes('纯文字 Stub 回复'), null, { timeout: 8000 });
 
     assert.equal(requests.length, 1);
+    assert.equal(requests[0].messages[0].role, 'system');
+    assert.equal(requests[0].messages[0].content.includes('叫我小林'), true);
     const content = requests[0].messages.at(-1).content;
     assert.equal(typeof content, 'string');
     assert.equal(JSON.stringify(requests[0]).includes('image_url'), false);

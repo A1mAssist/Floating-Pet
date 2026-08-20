@@ -245,6 +245,27 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .field-control:disabled { cursor: default; opacity: .48; }
 .setting-hint { margin: 8px 3px 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; user-select: text; }
 .setting-hint + .setting-hint { margin-top: 3px; }
+.memory-list { display: grid; gap: 8px; padding: 4px 0 8px; }
+.memory-item { display: grid; grid-template-columns: 84px minmax(0, 1fr) 38px 38px; gap: 6px; align-items: center; }
+.memory-item select, .memory-item input { width: 100%; min-width: 0; height: 36px; border: 1px solid rgba(255, 255, 255, .62); border-radius: 12px; background: var(--recessed); box-shadow: var(--shadow-pressed); padding: 0 8px; font-size: 11px; user-select: text; }
+.memory-item .icon-button { min-width: 36px; width: 36px; height: 36px; border-radius: 11px; }
+.memory-item .icon-button img { width: 15px; height: 15px; }
+.focus-timer { flex: 0 0 auto; margin: 0 0 6px; padding: 4px 0 7px; border-bottom: 1px solid var(--line); }
+.focus-timer-heading, .focus-timer-controls { display: flex; min-width: 0; align-items: center; gap: 5px; }
+.focus-timer-heading { justify-content: space-between; margin-bottom: 4px; font-size: 12px; }
+.focus-timer-heading span { color: var(--muted); font-size: 11px; }
+.focus-timer-controls strong { min-width: 52px; color: var(--accent-strong); font-variant-numeric: tabular-nums; font-size: 15px; }
+.timer-duration { display: inline-flex; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
+.timer-duration input { width: 46px; height: 32px; border: 1px solid rgba(255, 255, 255, .62); border-radius: 11px; background: var(--recessed); box-shadow: var(--shadow-pressed); padding: 0 5px; font-size: 12px; text-align: center; user-select: text; }
+.focus-timer-controls .button { min-height: 32px; height: 32px; padding: 0 8px; font-size: 11px; }
+.focus-timer-controls .icon-button { min-width: 32px; width: 32px; height: 32px; border-radius: 11px; margin-left: auto; }
+.focus-timer-controls .icon-button img { width: 15px; height: 15px; }
+.memory-confirm { display: flex; flex: 0 0 auto; align-items: center; justify-content: space-between; gap: 8px; margin: 0 0 5px; padding: 7px 9px; border: 1px solid rgba(22, 140, 125, .22); border-radius: 14px; background: rgba(229, 248, 243, .42); color: var(--ink); font-size: 11px; }
+.memory-confirm span { min-width: 0; }
+.memory-confirm strong, .memory-confirm small { display: block; overflow-wrap: anywhere; }
+.memory-confirm small { margin-top: 3px; color: var(--muted); }
+.memory-confirm .action-row { margin: 0; flex-wrap: nowrap; }
+.memory-confirm .button { min-height: 32px; height: 32px; padding: 0 10px; font-size: 11px; }
 
 .active-level { margin: 5px 0 10px; padding: 0; border: 0; }
 .active-level legend { margin-bottom: 7px; color: var(--muted); font-size: 11px; }
@@ -352,7 +373,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   right: 30px;
   bottom: 274px;
   display: flex;
-  height: min(340px, calc(100vh - 304px));
+  height: min(360px, calc(100vh - 288px));
   min-height: 300px;
   flex-direction: column;
   padding: 22px;

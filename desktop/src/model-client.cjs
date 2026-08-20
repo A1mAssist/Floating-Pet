@@ -3,7 +3,7 @@
 const { createHash } = require('node:crypto');
 const { fakeReply } = require('./core.cjs');
 
-const MAX_MESSAGES = 6;
+const MAX_MESSAGES = 7;
 const MAX_TEXT_CHARS = 4000;
 const MAX_OUTPUT_CHARS = 4000;
 const MAX_RESPONSE_CHARS = 1024 * 1024;
@@ -62,9 +62,10 @@ function validateInput(input) {
 
   const messages = [];
   let lastUserIndex = -1;
-  for (const message of input.messages) {
+  for (const [index, message] of input.messages.entries()) {
     if (!message || typeof message !== 'object' || Array.isArray(message)) return null;
-    if (message.role !== 'user' && message.role !== 'assistant') return null;
+    if (message.role !== 'user' && message.role !== 'assistant' && message.role !== 'system') return null;
+    if (message.role === 'system' && index !== 0) return null;
     if (typeof message.content !== 'string') return null;
     const content = message.content.trim();
     if (!content || content.length > MAX_TEXT_CHARS) return null;

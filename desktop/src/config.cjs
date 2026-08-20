@@ -10,6 +10,10 @@ const DESIRED_MODES = new Set(['chat', 'duplex']);
 const PROFILE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const RESERVED_PROFILE_IDS = new Set(['__proto__', 'constructor', 'prototype']);
 const MAX_PROFILES = 32;
+const MAX_MEMORIES = 50;
+const MAX_MEMORY_TEXT = 500;
+const MIN_FOCUS_DURATION_MS = 5 * 60 * 1000;
+const MAX_FOCUS_DURATION_MS = 120 * 60 * 1000;
 const MAX_CONFIG_LENGTH = 1_048_576;
 const MAX_PATH_LENGTH = 2048;
 const MAX_WINDOW_COORDINATE = 1_000_000;
@@ -25,7 +29,9 @@ const DEFAULT_USER_CONFIG = Object.freeze({
     openAtLogin: false
   }),
   activeProfileId: '',
-  profiles: Object.freeze({})
+  profiles: Object.freeze({}),
+  memories: Object.freeze([]),
+  focusTimer: null
 });
 
 function isRecord(value) {
@@ -156,6 +162,30 @@ function normalizeCoordinate(value) {
   return Number.isInteger(value) && Math.abs(value) <= MAX_WINDOW_COORDINATE ? value : null;
 }
 
+function normalizeMemory(value) {
+  if (!isRecord(value)) return null;
+  const id = boundedText(value.id, 100);
+  const text = boundedText(value.text, MAX_MEMORY_TEXT);
+  if (!id || !text || !['name', 'goal', 'preference'].includes(value.kind)) return null;
+  if (!Number.isSafeInteger(value.createdAt) || value.createdAt < 0
+      || !Number.isSafeInteger(value.updatedAt) || value.updatedAt < value.createdAt) return null;
+  return { id, kind: value.kind, text, createdAt: value.createdAt, updatedAt: value.updatedAt };
+}
+
+function normalizeFocusTimer(value) {
+  if (!isRecord(value) || !['running', 'paused'].includes(value.state)) return null;
+  const durationMs = Number(value.durationMs);
+  if (!Number.isSafeInteger(durationMs) || durationMs < MIN_FOCUS_DURATION_MS || durationMs > MAX_FOCUS_DURATION_MS) return null;
+  if (value.state === 'running') {
+    const endsAt = Number(value.endsAt);
+    return Number.isSafeInteger(endsAt) && endsAt > 0 ? { state: 'running', durationMs, endsAt } : null;
+  }
+  const remainingMs = Number(value.remainingMs);
+  return Number.isSafeInteger(remainingMs) && remainingMs >= 0 && remainingMs <= durationMs
+    ? { state: 'paused', durationMs, remainingMs }
+    : null;
+}
+
 function normalizeUserConfig(value) {
   const input = isRecord(value) ? value : {};
   const windowValue = isRecord(input.window) ? input.window : {};
@@ -172,6 +202,18 @@ function normalizeUserConfig(value) {
   const activeProfileId = isProfileId(input.activeProfileId) && Object.hasOwn(profiles, input.activeProfileId)
     ? input.activeProfileId
     : '';
+  const memories = [];
+  const memoryIds = new Set();
+  if (Array.isArray(input.memories)) {
+    for (const candidate of input.memories) {
+      if (memories.length >= MAX_MEMORIES) break;
+      const memory = normalizeMemory(candidate);
+      if (memory && !memoryIds.has(memory.id)) {
+        memoryIds.add(memory.id);
+        memories.push(memory);
+      }
+    }
+  }
   return {
     version: 1,
     window: {
@@ -185,7 +227,9 @@ function normalizeUserConfig(value) {
       openAtLogin: typeof preferences.openAtLogin === 'boolean' ? preferences.openAtLogin : DEFAULT_USER_CONFIG.preferences.openAtLogin
     },
     activeProfileId,
-    profiles
+    profiles,
+    memories,
+    focusTimer: normalizeFocusTimer(input.focusTimer)
   };
 }
 

@@ -50,6 +50,29 @@ test('malformed config falls back to safe defaults', () => {
   assert.deepEqual(value.profiles, {});
 });
 
+test('normalizes bounded memories and restart-safe focus timer', () => {
+  const value = normalizeUserConfig({
+    memories: [
+      { id: 'm-1', kind: 'name', text: '叫我小林', createdAt: 1, updatedAt: 2 },
+      { id: 'm-1', kind: 'goal', text: '重复 ID', createdAt: 1, updatedAt: 2 },
+      { id: '', kind: 'goal', text: 'bad', createdAt: 1, updatedAt: 2 },
+      { id: 'm-2', kind: 'nope', text: 'bad', createdAt: 1, updatedAt: 2 }
+    ],
+    focusTimer: { state: 'running', durationMs: 1500000, endsAt: 1700000000000, remainingMs: 1 }
+  });
+  assert.deepEqual(value.memories, [{ id: 'm-1', kind: 'name', text: '叫我小林', createdAt: 1, updatedAt: 2 }]);
+  assert.deepEqual(value.focusTimer, { state: 'running', durationMs: 1500000, endsAt: 1700000000000 });
+});
+
+test('drops oversized memories and invalid timer states', () => {
+  const value = normalizeUserConfig({
+    memories: [{ id: 'm-1', kind: 'goal', text: 'x'.repeat(501), createdAt: 1, updatedAt: 1 }],
+    focusTimer: { state: 'running', durationMs: 1, endsAt: 0 }
+  });
+  assert.deepEqual(value.memories, []);
+  assert.equal(value.focusTimer, null);
+});
+
 test('profile validation rejects shell-shaped paths and unsupported protocols', () => {
   assert.equal(normalizeProfile(sshProfile({ remoteRoot: '/a; rm -rf /' })), null);
   assert.equal(normalizeProfile({ id: 'x', transport: 'direct', httpBase: 'file:///secret' }), null);
@@ -150,7 +173,9 @@ test('normalizes window and preference fields and drops invalid profiles', () =>
     window: { x: -1200, y: null },
     preferences: { activeLevel: 'active', voice: false, captions: false, openAtLogin: true },
     activeProfileId: 'direct-local',
-    profiles: { 'direct-local': directProfile() }
+    profiles: { 'direct-local': directProfile() },
+    memories: [],
+    focusTimer: null
   });
 });
 

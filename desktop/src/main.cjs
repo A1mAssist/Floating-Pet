@@ -434,7 +434,8 @@ async function updateSettingsNow(patch) {
   const next = {
     ...userConfig,
     preferences: { ...userConfig.preferences },
-    profiles: { ...userConfig.profiles }
+    profiles: { ...userConfig.profiles },
+    memories: [...userConfig.memories]
   };
   let reconnect = false;
 
@@ -450,6 +451,16 @@ async function updateSettingsNow(patch) {
       if (typeof preferences[name] !== 'boolean') return { ok: false, code: 'invalid_settings' };
       next.preferences[name] = preferences[name];
     }
+  }
+
+  if (Object.hasOwn(patch, 'memories')) {
+    if (!Array.isArray(patch.memories)) return { ok: false, code: 'invalid_settings' };
+    next.memories = patch.memories;
+  }
+
+  if (Object.hasOwn(patch, 'focusTimer')) {
+    if (patch.focusTimer !== null && !isRecord(patch.focusTimer)) return { ok: false, code: 'invalid_settings' };
+    next.focusTimer = patch.focusTimer;
   }
 
   if (Object.hasOwn(patch, 'profile')) {
