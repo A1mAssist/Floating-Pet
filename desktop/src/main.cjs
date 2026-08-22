@@ -3,7 +3,7 @@
 const { app, BrowserWindow, Menu, Tray, ipcMain, screen: electronScreen, session, desktopCapturer, nativeImage, dialog } = require('electron');
 const fs = require('node:fs');
 const path = require('node:path');
-const { normalizeProfile, normalizeUserConfig, readUserConfig, writeUserConfig } = require('./config.cjs');
+const { createBackupData, normalizeBackupData, normalizeProfile, normalizeUserConfig, readUserConfig, writeUserConfig } = require('./config.cjs');
 const { createSupervisor, getModelEndpoints } = require('./model-supervisor.cjs');
 const {
   chat: modelChat,
@@ -22,7 +22,7 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const TEST_MODE = process.argv.includes('--test-mode');
-const FAKE_MODEL = process.argv.includes('--fake-model') || TEST_MODE;
+const FAKE_MODEL = process.argv.includes('--fake-model');
 const smokeIndex = process.argv.indexOf('--smoke-report');
 const SMOKE_REPORT = smokeIndex >= 0 ? path.resolve(process.argv[smokeIndex + 1] || '') : null;
 const WINDOW_SIZE = { width: 460, height: 640 };
@@ -47,6 +47,7 @@ const LEGACY_REALTIME_CONFIG = Object.freeze({
 
 let mainWindow;
 let tray;
+let trayTimer = null;
 let configFilePath = null;
 let userConfig = normalizeUserConfig(null);
 let activeProfile = null;
@@ -186,6 +187,7 @@ async function saveUserConfig(next, { reconnect = false } = {}) {
   userConfig = normalizeUserConfig(next);
   activeProfile = userConfig.profiles[userConfig.activeProfileId] || null;
   applyLoginSetting();
+  rebuildTrayMenu();
   if (reconnect) {
     realtimeRequestGeneration += 1;
     await closeRealtime('profile_changed');
@@ -202,6 +204,16 @@ function sendCommand(command) {
 function rebuildTrayMenu() {
   if (!tray) return;
   const active = latestSnapshot.phase !== 'IDLE_VISIBLE';
+  const timer = userConfig.focusTimer;
+  const remainingMs = timer?.state === 'running' ? Math.max(0, timer.endsAt - Date.now()) : timer?.remainingMs;
+  const remainingMinutes = timer ? Math.max(0, Math.ceil(remainingMs / 60_000)) : 0;
+  const focusItems = timer ? [
+    { label: `专注 · ${remainingMinutes} 分钟`, enabled: false },
+    { label: timer.state === 'running' ? '暂停专注' : '继续专注', click: () => sendCommand('focus-toggle') },
+    { label: '取消专注', click: () => sendCommand('focus-cancel') }
+  ] : [
+    { label: '开始专注 25 分钟', click: () => sendCommand('focus-start-default') }
+  ];
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: active ? '结束陪伴' : '开始陪伴', click: () => sendCommand('toggle-session') },
     { label: '暂停采集', enabled: latestSnapshot.activeInputs.length > 0, click: () => sendCommand('pause-capture') },
@@ -212,6 +224,9 @@ function rebuildTrayMenu() {
       { label: '主动', type: 'radio', checked: latestSnapshot.activeLevel === 'active', click: () => sendCommand('set-active-level:active') }
     ] },
     { type: 'separator' },
+    ...focusItems,
+    { type: 'separator' },
+    { label: '打开对话', click: () => sendCommand('open-assist') },
     { label: '设置', click: () => sendCommand('open-settings') },
     { label: '退出', click: () => app.quit() }
   ]));
@@ -435,7 +450,10 @@ async function updateSettingsNow(patch) {
     ...userConfig,
     preferences: { ...userConfig.preferences },
     profiles: { ...userConfig.profiles },
-    memories: [...userConfig.memories]
+    memories: [...userConfig.memories],
+    todos: [...userConfig.todos],
+    notes: [...userConfig.notes],
+    focusStats: { ...userConfig.focusStats }
   };
   let reconnect = false;
 
@@ -461,6 +479,17 @@ async function updateSettingsNow(patch) {
   if (Object.hasOwn(patch, 'focusTimer')) {
     if (patch.focusTimer !== null && !isRecord(patch.focusTimer)) return { ok: false, code: 'invalid_settings' };
     next.focusTimer = patch.focusTimer;
+  }
+
+  for (const name of ['todos', 'notes']) {
+    if (!Object.hasOwn(patch, name)) continue;
+    if (!Array.isArray(patch[name])) return { ok: false, code: 'invalid_settings' };
+    next[name] = patch[name];
+  }
+
+  if (Object.hasOwn(patch, 'focusStats')) {
+    if (!isRecord(patch.focusStats)) return { ok: false, code: 'invalid_settings' };
+    next.focusStats = patch.focusStats;
   }
 
   if (Object.hasOwn(patch, 'profile')) {
@@ -504,6 +533,41 @@ function updateSettings(patch) {
   const run = settingsOperation.catch(() => {}).then(() => updateSettingsNow(patch));
   settingsOperation = run;
   return run;
+}
+
+async function exportSettings() {
+  try {
+    const result = await dialog.showSaveDialog(mainWindow, {
+      title: '导出本地数据',
+      defaultPath: `floating-pet-backup-${new Date().toISOString().slice(0, 10)}.json`,
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['dontAddToRecent']
+    });
+    if (result.canceled || !result.filePath) return { ok: false, code: 'cancelled' };
+    await fs.promises.writeFile(result.filePath, `${JSON.stringify(createBackupData(userConfig), null, 2)}\n`, 'utf8');
+    return { ok: true };
+  } catch {
+    return { ok: false, code: 'export_failed' };
+  }
+}
+
+async function importSettings() {
+  try {
+    const result = await dialog.showOpenDialog(mainWindow, {
+      title: '导入本地数据',
+      filters: [{ name: 'JSON', extensions: ['json'] }],
+      properties: ['openFile', 'dontAddToRecent']
+    });
+    if (result.canceled || result.filePaths.length !== 1) return { ok: false, code: 'cancelled' };
+    const filePath = result.filePaths[0];
+    const stat = await fs.promises.stat(filePath);
+    if (!stat.isFile() || stat.size > 1_000_000) return { ok: false, code: 'invalid_backup' };
+    const data = normalizeBackupData(JSON.parse(await fs.promises.readFile(filePath, 'utf8')));
+    if (!data) return { ok: false, code: 'invalid_backup' };
+    return updateSettings(data);
+  } catch (error) {
+    return { ok: false, code: error instanceof SyntaxError ? 'invalid_backup' : 'import_failed' };
+  }
 }
 
 async function selectCredentialDirectory() {
@@ -574,6 +638,14 @@ function registerIpc() {
   ipcMain.handle('settings:update', async (event, patch) => {
     if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
     return updateSettings(patch);
+  });
+  ipcMain.handle('settings:export', async (event) => {
+    if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
+    return exportSettings();
+  });
+  ipcMain.handle('settings:import', async (event) => {
+    if (!trustedRenderer(event)) return { ok: false, code: 'invalid_sender' };
+    return importSettings();
   });
   ipcMain.handle('model:connection-state', (event) => {
     if (!trustedRenderer(event)) return { state: 'idle', code: 'invalid_sender', health: null };
@@ -778,6 +850,7 @@ if (!app.requestSingleInstanceLock()) {
     tray = new Tray(trayImage);
     tray.on('click', () => mainWindow?.showInactive());
     rebuildTrayMenu();
+    trayTimer = setInterval(rebuildTrayMenu, 30_000);
     await reconfigureSupervisor(activeProfile);
   });
   app.on('before-quit', (event) => {
@@ -786,6 +859,7 @@ if (!app.requestSingleInstanceLock()) {
     if (shutdownStarted) return;
     shutdownStarted = true;
     stopSnap();
+    clearInterval(trayTimer);
     realtimeRequestGeneration += 1;
     cancelScreenAnalyses();
     if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.send('capture:shutdown');

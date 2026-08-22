@@ -14,6 +14,10 @@ const MAX_MEMORIES = 50;
 const MAX_MEMORY_TEXT = 500;
 const MIN_FOCUS_DURATION_MS = 5 * 60 * 1000;
 const MAX_FOCUS_DURATION_MS = 120 * 60 * 1000;
+const MAX_TODOS = 100;
+const MAX_TODO_TEXT = 240;
+const MAX_NOTES = 30;
+const MAX_NOTE_TEXT = 2000;
 const MAX_CONFIG_LENGTH = 1_048_576;
 const MAX_PATH_LENGTH = 2048;
 const MAX_WINDOW_COORDINATE = 1_000_000;
@@ -31,7 +35,10 @@ const DEFAULT_USER_CONFIG = Object.freeze({
   activeProfileId: '',
   profiles: Object.freeze({}),
   memories: Object.freeze([]),
-  focusTimer: null
+  focusTimer: null,
+  todos: Object.freeze([]),
+  notes: Object.freeze([]),
+  focusStats: Object.freeze({ completed: 0, minutes: 0 })
 });
 
 function isRecord(value) {
@@ -48,6 +55,12 @@ function boundedText(value, maxLength, fallback = null) {
   if (typeof value !== 'string') return fallback;
   const text = value.trim();
   return text && text.length <= maxLength && !/[\u0000-\u001f\u007f]/.test(text) ? text : fallback;
+}
+
+function boundedMultilineText(value, maxLength, fallback = null) {
+  if (typeof value !== 'string') return fallback;
+  const text = value.trim();
+  return text && text.length <= maxLength && !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(text) ? text : fallback;
 }
 
 function normalizeEndpoint(value, protocols, { trimTrailingSlash = false } = {}) {
@@ -186,6 +199,22 @@ function normalizeFocusTimer(value) {
     : null;
 }
 
+function normalizeTodo(value) {
+  if (!isRecord(value)) return null;
+  const id = boundedText(value.id, 100);
+  const text = boundedText(value.text, MAX_TODO_TEXT);
+  if (!id || !text || typeof value.done !== 'boolean' || !Number.isSafeInteger(value.createdAt) || value.createdAt < 0) return null;
+  return { id, text, done: value.done, createdAt: value.createdAt, completedAt: value.completedAt == null ? null : Number.isSafeInteger(value.completedAt) && value.completedAt >= value.createdAt ? value.completedAt : null };
+}
+
+function normalizeNote(value) {
+  if (!isRecord(value)) return null;
+  const id = boundedText(value.id, 100);
+  const text = boundedMultilineText(value.text, MAX_NOTE_TEXT);
+  if (!id || !text || !Number.isSafeInteger(value.createdAt) || value.createdAt < 0 || !Number.isSafeInteger(value.updatedAt) || value.updatedAt < value.createdAt) return null;
+  return { id, text, createdAt: value.createdAt, updatedAt: value.updatedAt };
+}
+
 function normalizeUserConfig(value) {
   const input = isRecord(value) ? value : {};
   const windowValue = isRecord(input.window) ? input.window : {};
@@ -214,6 +243,21 @@ function normalizeUserConfig(value) {
       }
     }
   }
+  const todos = [];
+  const todoIds = new Set();
+  if (Array.isArray(input.todos)) for (const candidate of input.todos) {
+    if (todos.length >= MAX_TODOS) break;
+    const todo = normalizeTodo(candidate);
+    if (todo && !todoIds.has(todo.id)) { todoIds.add(todo.id); todos.push(todo); }
+  }
+  const notes = [];
+  const noteIds = new Set();
+  if (Array.isArray(input.notes)) for (const candidate of input.notes) {
+    if (notes.length >= MAX_NOTES) break;
+    const note = normalizeNote(candidate);
+    if (note && !noteIds.has(note.id)) { noteIds.add(note.id); notes.push(note); }
+  }
+  const stats = isRecord(input.focusStats) ? input.focusStats : {};
   return {
     version: 1,
     window: {
@@ -229,8 +273,55 @@ function normalizeUserConfig(value) {
     activeProfileId,
     profiles,
     memories,
-    focusTimer: normalizeFocusTimer(input.focusTimer)
+    focusTimer: normalizeFocusTimer(input.focusTimer),
+    todos,
+    notes,
+    focusStats: {
+      completed: Number.isSafeInteger(stats.completed) && stats.completed >= 0 ? Math.min(stats.completed, 1_000_000) : 0,
+      minutes: Number.isSafeInteger(stats.minutes) && stats.minutes >= 0 ? Math.min(stats.minutes, 10_000_000) : 0
+    }
   };
+}
+
+function createBackupData(value, exportedAt = Date.now()) {
+  const config = normalizeUserConfig(value);
+  return {
+    version: 1,
+    exportedAt,
+    preferences: { ...config.preferences },
+    memories: config.memories.map((item) => ({ ...item })),
+    todos: config.todos.map((item) => ({ ...item })),
+    notes: config.notes.map((item) => ({ ...item })),
+    focusStats: { ...config.focusStats }
+  };
+}
+
+function normalizeBackupData(value) {
+  if (!isRecord(value) || value.version !== 1 || !isRecord(value.preferences)
+      || !Array.isArray(value.memories) || !Array.isArray(value.todos) || !Array.isArray(value.notes)
+      || !isRecord(value.focusStats)) return null;
+  const config = normalizeUserConfig({
+    preferences: value.preferences,
+    memories: value.memories,
+    todos: value.todos,
+    notes: value.notes,
+    focusStats: value.focusStats
+  });
+  const result = {
+    preferences: config.preferences,
+    memories: config.memories,
+    todos: config.todos,
+    notes: config.notes,
+    focusStats: config.focusStats
+  };
+  const payload = {
+    preferences: value.preferences,
+    memories: value.memories,
+    todos: value.todos,
+    notes: value.notes,
+    focusStats: value.focusStats
+  };
+  return JSON.stringify(result) === JSON.stringify(payload) ? result : null;
 }
 
 async function readUserConfig(filePath, fsImpl = fs) {
@@ -265,6 +356,8 @@ function writeUserConfig(filePath, config, fsImpl = fs) {
 
 module.exports = {
   DEFAULT_USER_CONFIG,
+  createBackupData,
+  normalizeBackupData,
   normalizeProfile,
   normalizeUserConfig,
   readUserConfig,

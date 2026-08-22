@@ -50,12 +50,26 @@ test('desktop pet confirms memories and restores focus timer state', { timeout: 
       const result = await window.pet.settings.get();
       return result.settings.memories.length === 1 && result.settings.memories[0].text === '叫我小林';
     });
+    for (const command of ['记住：目标：完成比赛版本', '记住：偏好：本地优先']) {
+      await page.fill('#messageInput', command);
+      await page.keyboard.press('Enter');
+      await page.click('#confirmMemory');
+    }
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.memories.length === 3);
 
     await page.click('#settingsButton');
     await page.waitForFunction(() => document.querySelector('#settingsPanel').dataset.open === 'true');
-    await page.locator('#memoryList input').fill('叫我林同学');
-    await page.locator('#memoryList button[data-action="save-memory"]').click();
+    await page.locator('#memoryList input').first().fill('叫我林同学');
+    await page.locator('#memoryList button[data-action="save-memory"]').first().click();
     await page.waitForFunction(async () => (await window.pet.settings.get()).settings.memories[0]?.text === '叫我林同学');
+    await page.fill('#todoInput', '完成离线验收');
+    await page.click('#todoForm button[type="submit"]');
+    await page.fill('#noteInput', '模型断开时也能看到这条便签\n第二行仍会保存');
+    await page.click('#noteForm button[type="submit"]');
+    await page.waitForFunction(async () => {
+      const settings = (await window.pet.settings.get()).settings;
+      return settings.todos[0]?.text === '完成离线验收' && settings.notes[0]?.text === '模型断开时也能看到这条便签\n第二行仍会保存';
+    });
 
     await page.click('#closeSettings');
     await page.waitForFunction(() => document.querySelector('#settingsPanel').dataset.open === 'false');
@@ -74,7 +88,10 @@ test('desktop pet confirms memories and restores focus timer state', { timeout: 
     await page.waitForSelector('#pet');
     await page.waitForFunction(async () => {
       const result = await window.pet.settings.get();
-      return result.settings.memories[0]?.text === '叫我林同学' && result.settings.focusTimer?.state === 'paused';
+      return result.settings.memories[0]?.text === '叫我林同学'
+        && result.settings.focusTimer?.state === 'paused'
+        && result.settings.todos[0]?.text === '完成离线验收'
+        && result.settings.notes[0]?.text === '模型断开时也能看到这条便签\n第二行仍会保存';
     });
     await page.click('#pet');
     await page.waitForFunction(() => document.querySelector('#assistCard').dataset.open === 'true');
@@ -84,10 +101,56 @@ test('desktop pet confirms memories and restores focus timer state', { timeout: 
     await page.evaluate(() => window.__floatingPetTest.advanceClock(5 * 60 * 1000));
     await page.waitForFunction(async () => (await window.pet.settings.get()).settings.focusTimer === null);
     await page.waitForFunction(() => document.querySelector('#focusTimerStatus').textContent === '已完成');
+    await page.waitForFunction(async () => {
+      const stats = (await window.pet.settings.get()).settings.focusStats;
+      return stats.completed === 1 && stats.minutes === 5;
+    });
+    await page.waitForTimeout(600);
+    assert.deepEqual((await page.evaluate(() => window.pet.settings.get())).settings.focusStats, { completed: 1, minutes: 5 });
+    await page.evaluate(() => window.__floatingPetTest.advanceClock(5 * 60 * 1000));
+    await page.waitForTimeout(500);
+    assert.deepEqual((await page.evaluate(() => window.pet.settings.get())).settings.focusStats, { completed: 1, minutes: 5 });
 
-    await page.click('#settingsButton');
+    await page.fill('#messageInput', '开启勿扰');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.__floatingPetTest?.getState()?.dnd === true);
+    assert.equal((await page.evaluate(() => window.__floatingPetTest?.getState()?.messages.at(-1))).source, 'local');
+    await page.fill('#messageInput', '关闭勿扰');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => window.__floatingPetTest?.getState()?.dnd === false);
+    await page.fill('#messageInput', '专注 10 分钟');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.focusTimer?.durationMs === 10 * 60 * 1000);
+    await page.fill('#messageInput', '取消计时');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(async () => (await window.pet.settings.get()).settings.focusTimer === null);
+
+    await page.fill('#messageInput', '查看记忆');
+    await page.keyboard.press('Enter');
     await page.waitForFunction(() => document.querySelector('#settingsPanel').dataset.open === 'true');
-    await page.locator('#memoryList button[data-action="delete-memory"]').click();
+    await page.waitForFunction(() => document.querySelector('#conversation').textContent.includes('称呼：叫我林同学') && document.querySelector('#conversation').textContent.includes('目标：完成比赛版本') && document.querySelector('#conversation').textContent.includes('偏好：本地优先'));
+    assert.equal(await page.locator('#todoList input').inputValue(), '完成离线验收');
+    assert.equal(await page.locator('#noteList textarea').inputValue(), '模型断开时也能看到这条便签\n第二行仍会保存');
+    await page.locator('#todoList input').fill('完成离线验收并记录结果');
+    await page.locator('#todoList input').blur();
+    await page.locator('#noteList textarea').fill('离线便签已编辑');
+    await page.locator('#noteList textarea').blur();
+    await page.waitForFunction(async () => {
+      const settings = (await window.pet.settings.get()).settings;
+      return settings.todos[0]?.text === '完成离线验收并记录结果' && settings.notes[0]?.text === '离线便签已编辑';
+    });
+    await page.locator('#todoList .local-item button').first().click();
+    await page.waitForFunction(async () => {
+      const todo = (await window.pet.settings.get()).settings.todos[0];
+      return todo?.done === true && Number.isSafeInteger(todo.completedAt);
+    });
+    await page.locator('#todoList .local-item button').last().click();
+    await page.locator('#noteList .local-item button').click();
+    await page.waitForFunction(async () => {
+      const settings = (await window.pet.settings.get()).settings;
+      return settings.todos.length === 0 && settings.notes.length === 0;
+    });
+    await page.evaluate(() => window.pet.settings.update({ memories: [] }));
     await page.waitForFunction(async () => (await window.pet.settings.get()).settings.memories.length === 0);
   } finally {
     await app?.close().catch(() => undefined);
@@ -539,7 +602,7 @@ test('desktop pet restores only safe settings after relaunch', { timeout: 60000 
     app = await launch();
     page = await app.firstWindow();
     await page.waitForSelector('#pet');
-    await page.waitForFunction(() => window.__floatingPetTest.getState().activeLevel === 'active');
+    await page.waitForFunction(() => window.__floatingPetTest?.getState()?.activeLevel === 'active');
     await page.evaluate(() => window.__floatingPetTest.openSettings());
     assert.equal(await page.locator('#profileSelect').inputValue(), 'ssh-b');
     assert.equal(await page.locator('#remoteRootInput').inputValue(), '/workspace/next-project');
@@ -826,6 +889,7 @@ test('desktop pet turns two remote screen observations into one proactive nudge'
     await page.waitForFunction(() => document.body.dataset.phase === 'SESSION_ACTIVE');
     await page.click('#pet', { button: 'right' });
     await page.click('#contextSettings');
+    await page.waitForFunction(() => ['测试模型服务', 'Ascend MiniCPM-o'].includes(document.querySelector('#modelLabel').textContent));
     await page.waitForFunction(() => document.querySelector('#screenSource').options.length > 1);
     const screenSource = await page.locator('#screenSource option').evaluateAll((options) => {
       return options.find((option) => option.value.startsWith('screen:'))?.value
@@ -975,6 +1039,15 @@ test('desktop pet keeps unsupported chat media out of the remote request', { tim
     await page.evaluate(() => document.querySelector('#simulateCue').click());
     await page.waitForFunction(() => document.querySelector('#nudgeBubble').dataset.open === 'true', null, { timeout: 8000 });
     await page.click('#acceptNudge');
+    await page.fill('#messageInput', '开启勿扰');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('#dndButton')?.getAttribute('aria-pressed') === 'true');
+    await page.waitForTimeout(150);
+    assert.equal(requests.length, 0);
+    await page.fill('#messageInput', '关闭勿扰');
+    await page.keyboard.press('Enter');
+    await page.waitForFunction(() => document.querySelector('#dndButton')?.getAttribute('aria-pressed') === 'false');
+    assert.equal(requests.length, 0);
     await page.fill('#messageInput', '记住：称呼：叫我小林');
     await page.keyboard.press('Enter');
     await page.click('#confirmMemory');

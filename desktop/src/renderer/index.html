@@ -81,6 +81,26 @@
         <p id="memoryEmpty" class="setting-hint">还没有已确认的记忆</p>
         <div id="memoryList" class="memory-list"></div>
       </div>
+
+      <div class="setting-group compact" aria-labelledby="todoHeading">
+        <div class="group-heading"><h2 id="todoHeading">任务</h2><span id="todoCount">0 项</span></div>
+        <form id="todoForm" class="local-entry-form"><input id="todoInput" maxlength="240" autocomplete="off" placeholder="添加本地任务"><button class="button primary" type="submit">添加</button></form>
+        <p id="todoEmpty" class="setting-hint">还没有任务</p>
+        <div id="todoList" class="local-list"></div>
+      </div>
+
+      <div class="setting-group compact" aria-labelledby="noteHeading">
+        <div class="group-heading"><h2 id="noteHeading">便签</h2><span id="noteCount">0 条</span></div>
+        <form id="noteForm" class="local-entry-form"><textarea id="noteInput" maxlength="2000" rows="2" placeholder="写一条只保存在本机的便签"></textarea><button class="button primary" type="submit">保存</button></form>
+        <p id="noteEmpty" class="setting-hint">还没有便签</p>
+        <div id="noteList" class="local-list"></div>
+      </div>
+
+      <div class="setting-group compact" aria-labelledby="dataHeading">
+        <div class="group-heading"><h2 id="dataHeading">本地数据</h2><span>不含连接与凭据</span></div>
+        <div class="connection-actions"><button id="exportSettings" class="button quiet" type="button">导出备份</button><button id="importSettings" class="button quiet" type="button">导入备份</button></div>
+        <p class="setting-hint">仅备份偏好、已确认记忆、任务、便签和专注统计。</p>
+      </div>
     </section>
 
     <section id="assistCard" class="surface assist-card interactive" data-open="false" aria-labelledby="assistTitle" aria-hidden="true">
@@ -97,7 +117,7 @@
         <span id="observationNoteText"></span>
       </div>
       <div id="focusTimer" class="focus-timer" aria-label="专注计时">
-        <div class="focus-timer-heading"><strong>专注</strong><span id="focusTimerStatus">未开始</span></div>
+        <div class="focus-timer-heading"><strong>专注</strong><span><span id="focusStats">完成 0 次</span> · <span id="focusTimerStatus">未开始</span></span></div>
         <div class="focus-timer-controls">
           <label class="timer-duration" for="focusDuration"><span class="sr-only">分钟</span><input id="focusDuration" type="number" min="5" max="120" step="5" value="25" inputmode="numeric"><span>分钟</span></label>
           <strong id="focusRemaining">25:00</strong>

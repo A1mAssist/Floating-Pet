@@ -29,7 +29,9 @@ const api = {
   }),
   settings: Object.freeze({
     get: () => ipcRenderer.invoke('settings:get'),
-    update: (patch) => ipcRenderer.invoke('settings:update', patch)
+    update: (patch) => ipcRenderer.invoke('settings:update', patch),
+    export: () => ipcRenderer.invoke('settings:export'),
+    import: () => ipcRenderer.invoke('settings:import')
   }),
   model: Object.freeze({
     chat: (request) => ipcRenderer.invoke('model:chat', request),

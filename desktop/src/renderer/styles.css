@@ -250,6 +250,14 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .memory-item select, .memory-item input { width: 100%; min-width: 0; height: 36px; border: 1px solid rgba(255, 255, 255, .62); border-radius: 12px; background: var(--recessed); box-shadow: var(--shadow-pressed); padding: 0 8px; font-size: 11px; user-select: text; }
 .memory-item .icon-button { min-width: 36px; width: 36px; height: 36px; border-radius: 11px; }
 .memory-item .icon-button img { width: 15px; height: 15px; }
+.local-entry-form { display: flex; align-items: stretch; gap: 7px; padding: 4px 0 6px; }
+.local-entry-form input, .local-entry-form textarea, .local-item input, .local-item textarea { min-width: 0; flex: 1; border: 1px solid rgba(255, 255, 255, .62); border-radius: 12px; background: var(--recessed); box-shadow: var(--shadow-pressed); padding: 8px 10px; font: inherit; font-size: 11px; resize: vertical; user-select: text; }
+.local-entry-form .button { align-self: stretch; min-height: 36px; padding: 0 11px; font-size: 11px; }
+.local-list { display: grid; gap: 7px; padding: 4px 0 8px; }
+.local-item { display: flex; min-width: 0; align-items: center; gap: 6px; }
+.local-item[data-done="true"] input { color: var(--muted); text-decoration: line-through; }
+.local-item .icon-button { flex: 0 0 auto; min-width: 34px; width: 34px; height: 34px; border-radius: 11px; }
+.local-item .icon-button img { width: 14px; height: 14px; }
 .focus-timer { flex: 0 0 auto; margin: 0 0 6px; padding: 4px 0 7px; border-bottom: 1px solid var(--line); }
 .focus-timer-heading, .focus-timer-controls { display: flex; min-width: 0; align-items: center; gap: 5px; }
 .focus-timer-heading { justify-content: space-between; margin-bottom: 4px; font-size: 12px; }

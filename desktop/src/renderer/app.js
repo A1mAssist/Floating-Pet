@@ -109,6 +109,10 @@
     return Array.isArray(persistedSettings?.memories) ? persistedSettings.memories : [];
   }
 
+  function todos() { return Array.isArray(persistedSettings?.todos) ? persistedSettings.todos : []; }
+  function notes() { return Array.isArray(persistedSettings?.notes) ? persistedSettings.notes : []; }
+  function focusStats() { return persistedSettings?.focusStats && typeof persistedSettings.focusStats === 'object' ? persistedSettings.focusStats : { completed: 0, minutes: 0 }; }
+
   function focusTimer() {
     const value = persistedSettings?.focusTimer;
     return value && typeof value === 'object' ? value : null;
@@ -116,6 +120,17 @@
 
   function memoryKindLabel(kind) {
     return ({ name: '称呼', goal: '目标', preference: '偏好' })[kind] || '记忆';
+  }
+
+  function memoryValue(kind) { return memories().find((memory) => memory.kind === kind)?.text || ''; }
+
+  function displayName() {
+    return memoryValue('name').replace(/^(?:请)?(?:叫我|称呼我(?:为)?)[：:\s]*/u, '').trim();
+  }
+
+  function localMemorySummary() {
+    const items = memories().slice(0, 8).map((memory) => `${memoryKindLabel(memory.kind)}：${memory.text}`);
+    return items.length ? `已打开记忆。${items.join('；').slice(0, 700)}` : '已打开记忆，目前还没有已确认内容';
   }
 
   function parseMemoryCommand(text) {
@@ -343,6 +358,43 @@
     });
   }
 
+  function persistLocalData(patch) {
+    return enqueueSettingsOperation(async () => {
+      const result = await api.settings.update(typeof patch === 'function' ? patch() : patch);
+      if (result?.ok && applyPersistedSettings(result.settings)) render();
+      else if (result?.ok === false) { showSettingsError(result); render(); }
+      return result;
+    });
+  }
+
+  function renderLocalLists() {
+    const todoItems = todos();
+    $('todoCount').textContent = `${todoItems.filter((item) => !item.done).length} 项未完成`;
+    $('todoEmpty').hidden = todoItems.length > 0;
+    const todoList = $('todoList');
+    const todoSignature = JSON.stringify(todoItems);
+    if (todoList.dataset.signature !== todoSignature) todoList.replaceChildren(...todoItems.map((item) => {
+      const row = document.createElement('div'); row.className = 'local-item'; row.dataset.todoId = item.id; row.dataset.done = String(item.done);
+      const input = document.createElement('input'); input.value = item.text; input.maxLength = 240; input.setAttribute('aria-label', '任务内容'); input.addEventListener('change', () => { const text = input.value.trim(); if (text) void persistLocalData(() => ({ todos: todos().map((todo) => todo.id === item.id ? { ...todo, text } : todo) })); else { input.value = item.text; showToast('任务内容不能为空'); } });
+      const toggle = document.createElement('button'); toggle.className = 'icon-button'; toggle.type = 'button'; toggle.textContent = item.done ? '↩' : '✓'; toggle.title = item.done ? '恢复任务' : '完成任务'; toggle.setAttribute('aria-label', toggle.title); toggle.addEventListener('click', () => void persistLocalData(() => { const current = todos().find((todo) => todo.id === item.id); const done = !current?.done; return { todos: todos().map((todo) => todo.id === item.id ? { ...todo, done, completedAt: done ? Date.now() : null } : todo) }; }));
+      const remove = document.createElement('button'); remove.className = 'icon-button'; remove.type = 'button'; remove.textContent = '×'; remove.title = '删除任务'; remove.setAttribute('aria-label', remove.title); remove.addEventListener('click', () => void persistLocalData(() => ({ todos: todos().filter((todo) => todo.id !== item.id) })));
+      row.append(input, toggle, remove); return row;
+    }));
+    todoList.dataset.signature = todoSignature;
+    const noteItems = notes();
+    $('noteCount').textContent = `${noteItems.length} 条`;
+    $('noteEmpty').hidden = noteItems.length > 0;
+    const noteList = $('noteList');
+    const noteSignature = JSON.stringify(noteItems);
+    if (noteList.dataset.signature !== noteSignature) noteList.replaceChildren(...noteItems.map((item) => {
+      const row = document.createElement('div'); row.className = 'local-item'; row.dataset.noteId = item.id;
+      const input = document.createElement('textarea'); input.value = item.text; input.maxLength = 2000; input.rows = 2; input.setAttribute('aria-label', '便签内容'); input.addEventListener('change', () => { const text = input.value.trim(); if (text) void persistLocalData(() => ({ notes: notes().map((note) => note.id === item.id ? { ...note, text, updatedAt: Math.max(Date.now(), note.createdAt) } : note) })); else { input.value = item.text; showToast('便签内容不能为空'); } });
+      const remove = document.createElement('button'); remove.className = 'icon-button'; remove.type = 'button'; remove.textContent = '×'; remove.title = '删除便签'; remove.setAttribute('aria-label', remove.title); remove.addEventListener('click', () => void persistLocalData(() => ({ notes: notes().filter((note) => note.id !== item.id) })));
+      row.append(input, remove); return row;
+    }));
+    noteList.dataset.signature = noteSignature;
+  }
+
   async function chooseCredentials() {
     if (activeProfile()?.transport !== 'ssh') return;
     try {
@@ -417,6 +469,18 @@
       && modelCapabilities.audioInput && modelCapabilities.audioOutput;
   }
 
+  function canUseInput(kind) {
+    if (!['fake', 'chat', 'duplex'].includes(modelCapabilities.state)) return false;
+    if (api.runtime.fakeModel) return true;
+    return ['chat', 'duplex'].includes(modelCapabilities.state);
+  }
+
+  function modelUsesInput(kind) {
+    if (api.runtime.fakeModel) return true;
+    if (kind === 'microphone') return modelCapabilities.chatAudioInput || canUseRealtime();
+    return modelCapabilities.imageInput || (canUseRealtime() && modelCapabilities.video);
+  }
+
   function applyCapabilityPresentation() {
     if (modelCapabilities.state === 'fake') return setModelPresentation('fake');
     if (modelCapabilities.state === 'chat' || modelCapabilities.state === 'duplex') {
@@ -441,7 +505,7 @@
       capabilityRetryTimer = setTimeout(() => {
         capabilityRetryTimer = null;
         void refreshModelCapabilities(true);
-      }, 5_000);
+      }, 30_000);
     }
   }
 
@@ -468,6 +532,7 @@
       const realtimeWasActive = realtimeActive || realtimeStarting;
       const previousState = modelCapabilities.state;
       modelCapabilities = next;
+      if (!['chat', 'duplex'].includes(next.state)) stopAllInputs();
       if (previousState !== 'chat' && next.state === 'chat' && next.imageInput) screenAnalysisPaused = false;
       capabilitiesCheckedAt = Date.now();
       applyCapabilityPresentation();
@@ -480,6 +545,7 @@
     } catch {
       if (generation !== capabilityGeneration) return modelCapabilities;
       modelCapabilities = normalizeCapabilities({ state: 'offline', reason: 'ipc_error' });
+      stopAllInputs();
       cancelScreenAnalysis();
       capabilitiesCheckedAt = Date.now();
       applyCapabilityPresentation();
@@ -803,10 +869,17 @@
     if (focusCompletionPending || !timer || timer.state !== 'running' || timer.endsAt > nowMs()) return false;
     focusCompletionPending = true;
     focusJustCompleted = true;
+    const stats = focusStats();
     renderFocusTimer();
-    void persistFocusTimer(null).finally(() => { focusCompletionPending = false; });
-    showToast('专注完成');
-    showCaption('专注完成');
+    void persistLocalData({
+      focusTimer: null,
+      focusStats: { completed: (stats.completed || 0) + 1, minutes: (stats.minutes || 0) + Math.round((timer.durationMs || 0) / 60000) }
+    }).finally(() => { focusCompletionPending = false; });
+    const name = displayName();
+    const message = name ? `${name}，专注完成` : '专注完成';
+    if (state.phase === PHASES.ENGAGED) addMessage('assistant', message, false, 'local');
+    showToast(message);
+    showCaption(message);
     if (sessionActive()) recordObservation({ eventKey: 'timer-done', kind: 'task_complete', source: 'timer', observedAtMs: nowMs() });
     return true;
   }
@@ -858,9 +931,11 @@
     $('realtimeToggle').title = realtimeSupported ? '' : realtimeUnavailableText;
     $('sessionRequirement').textContent = active ? '按需单独开启' : '需先开始陪伴';
     for (const [kind, control] of Object.entries(inputControls)) {
-      control.disabled = !active || (kind === 'screen' && !$('screenSource').value);
+      control.disabled = !active || !canUseInput(kind) || (kind === 'screen' && !$('screenSource').value);
       control.checked = streams.has(kind);
-      const label = streams.has(kind) ? (kind === 'screen' && selectedSourceName ? selectedSourceName : '已启用') : '已关闭';
+      const label = streams.has(kind)
+        ? !modelUsesInput(kind) ? '仅本地预览，不会分析' : kind === 'screen' && selectedSourceName ? selectedSourceName : '已启用'
+        : !canUseInput(kind) && !api.runtime.fakeModel ? '模型离线，不会采集' : '已关闭';
       inputStatus[kind].textContent = label;
       testStatus[kind].dataset.active = String(streams.has(kind));
     }
@@ -877,6 +952,8 @@
     renderMemories();
     renderPendingMemory();
     renderFocusTimer();
+    $('focusStats').textContent = `完成 ${focusStats().completed || 0} 次 · ${focusStats().minutes || 0} 分钟`;
+    renderLocalLists();
     renderConnectionSettings();
     syncQuickGlass();
     api.app.updateState({ phase: state.phase, activeLevel: settings.activeLevel, dnd: settings.dnd, activeInputs: [...streams.keys()] });
@@ -950,6 +1027,10 @@
     if (!sessionActive()) {
       inputControls[kind].checked = false;
       return showToast('请先开始陪伴');
+    }
+    if (!canUseInput(kind)) {
+      inputControls[kind].checked = false;
+      return showToast('当前模型能力不使用此输入，未开始采集');
     }
     if (kind === 'screen' && !$('screenSource').value) {
       inputControls[kind].checked = false;
@@ -1422,6 +1503,10 @@
       renderPendingMemory();
       return;
     }
+    if (handleLocalCommand(clean)) {
+      $('messageInput').value = '';
+      return;
+    }
     addMessage('user', clean);
     $('messageInput').value = '';
     modelBusy = true;
@@ -1483,6 +1568,57 @@
         if (state.phase === PHASES.ENGAGED) $('messageInput').focus();
       }
     }
+  }
+
+  function startFocus(minutes = 25) {
+    const durationMs = clamp(Number(minutes) || 25, 5, 120) * 60 * 1000;
+    focusJustCompleted = false;
+    void persistFocusTimer({ state: 'running', durationMs, endsAt: nowMs() + durationMs });
+  }
+
+  function toggleFocusPause() {
+    const timer = focusTimer();
+    if (!timer) return false;
+    if (timer.state === 'running') void persistFocusTimer({ state: 'paused', durationMs: timer.durationMs, remainingMs: timerRemainingMs(timer) });
+    else void persistFocusTimer({ state: 'running', durationMs: timer.durationMs, endsAt: nowMs() + timer.remainingMs });
+    return true;
+  }
+
+  function pauseFocus() {
+    const timer = focusTimer();
+    if (timer?.state !== 'running') return false;
+    void persistFocusTimer({ state: 'paused', durationMs: timer.durationMs, remainingMs: timerRemainingMs(timer) });
+    return true;
+  }
+
+  function resumeFocus() {
+    const timer = focusTimer();
+    if (timer?.state !== 'paused') return false;
+    void persistFocusTimer({ state: 'running', durationMs: timer.durationMs, endsAt: nowMs() + timer.remainingMs });
+    return true;
+  }
+
+  function cancelFocus() {
+    if (!focusTimer()) return false;
+    focusJustCompleted = false;
+    void persistFocusTimer(null);
+    return true;
+  }
+
+  function localReply(text) { addMessage('assistant', text, false, 'local'); showCaption(text); }
+
+  function handleLocalCommand(text) {
+    const focusMatch = /^(?:开始)?专注\s*(\d{1,3})\s*分钟$/u.exec(text);
+    if (focusMatch) { const minutes = clamp(Number(focusMatch[1]), 5, 120); startFocus(minutes); localReply(`已开始 ${minutes} 分钟专注`); return true; }
+    if (/^(?:开始专注|专注)$/u.test(text)) { startFocus(); localReply('已开始 25 分钟专注'); return true; }
+    if (/^(?:暂停计时|暂停专注)$/u.test(text)) { localReply(pauseFocus() ? '专注计时已暂停' : focusTimer()?.state === 'paused' ? '专注计时已经暂停' : '当前没有进行中的专注'); return true; }
+    if (/^(?:继续计时|继续专注)$/u.test(text)) { localReply(resumeFocus() ? '专注计时已继续' : focusTimer()?.state === 'running' ? '专注计时已经在进行' : '当前没有暂停的专注计时'); return true; }
+    if (/^(?:取消计时|取消专注)$/u.test(text)) { localReply(cancelFocus() ? '专注计时已取消' : '当前没有专注计时'); return true; }
+    if (/^(?:查看|显示)(?:长期)?记忆$/u.test(text)) { openSettings(pet); localReply(localMemorySummary()); return true; }
+    if (/^(?:开启|打开)勿扰$/u.test(text)) { setDnd(true); localReply('勿扰已开启'); return true; }
+    if (/^(?:关闭|解除)勿扰$/u.test(text)) { setDnd(false); localReply('勿扰已关闭'); return true; }
+    if (/^(?:停止|暂停)(?:全部)?采集$/u.test(text)) { stopAllInputs(); localReply('采集已停止'); return true; }
+    return false;
   }
 
   function takeAudioFrames(chunks, frameCount) {
@@ -1787,18 +1923,39 @@
     if (!text || text.length > 500 || !['name', 'goal', 'preference'].includes(kind)) return showToast('记忆内容无效');
     void persistMemories(memories().map((item) => item.id === id ? { ...item, kind, text, updatedAt: Date.now() } : item));
   });
+  $('todoForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const text = $('todoInput').value.trim();
+    if (!text) return;
+    if (todos().length >= 100) return showToast('任务已达 100 项上限');
+    $('todoInput').value = '';
+    void persistLocalData(() => ({ todos: [...todos(), { id: crypto.randomUUID(), text, done: false, createdAt: Date.now(), completedAt: null }] }));
+  });
+  $('noteForm').addEventListener('submit', (event) => {
+    event.preventDefault();
+    const text = $('noteInput').value.trim();
+    if (!text) return;
+    if (notes().length >= 30) return showToast('便签已达 30 条上限');
+    $('noteInput').value = '';
+    const at = Date.now();
+    void persistLocalData(() => ({ notes: [...notes(), { id: crypto.randomUUID(), text, createdAt: at, updatedAt: at }] }));
+  });
+  $('exportSettings').addEventListener('click', async () => {
+    const result = await api.settings.export();
+    if (result?.ok) showToast('本地数据已导出'); else if (result?.code !== 'cancelled') showToast('导出失败');
+  });
+  $('importSettings').addEventListener('click', async () => {
+    if (!window.confirm('导入会替换当前偏好、记忆、任务、便签和专注统计。继续吗？')) return;
+    const result = await api.settings.import();
+    if (result?.ok && applyPersistedSettings(result.settings)) { showToast('本地数据已导入'); render(); }
+    else if (result?.code !== 'cancelled') showToast('导入失败');
+  });
   $('focusStart').addEventListener('click', () => {
     const minutes = clamp(Number($('focusDuration').value) || 25, 5, 120);
-    focusJustCompleted = false;
-    void persistFocusTimer({ state: 'running', durationMs: minutes * 60 * 1000, endsAt: nowMs() + minutes * 60 * 1000 });
+    startFocus(minutes);
   });
-  $('focusPause').addEventListener('click', () => {
-    const timer = focusTimer();
-    if (!timer) return;
-    if (timer.state === 'running') void persistFocusTimer({ state: 'paused', durationMs: timer.durationMs, remainingMs: timerRemainingMs(timer) });
-    else void persistFocusTimer({ state: 'running', durationMs: timer.durationMs, endsAt: nowMs() + timer.remainingMs });
-  });
-  $('focusCancel').addEventListener('click', () => { focusJustCompleted = false; void persistFocusTimer(null); });
+  $('focusPause').addEventListener('click', toggleFocusPause);
+  $('focusCancel').addEventListener('click', cancelFocus);
   $('dndToggle').addEventListener('change', (event) => setDnd(event.target.checked));
   $('presentationToggle').addEventListener('change', (event) => setPresentation(event.target.checked));
   $('voiceToggle').addEventListener('change', (event) => {
@@ -1974,6 +2131,10 @@
     if (command === 'pause-capture') { stopAllInputs(); showToast('采集已暂停'); }
     if (command === 'toggle-dnd') setDnd(!settings.dnd);
     if (command === 'open-settings') openSettings(pet);
+    if (command === 'open-assist') setPanel('assist', pet);
+    if (command === 'focus-start-default') startFocus();
+    if (command === 'focus-toggle') toggleFocusPause();
+    if (command === 'focus-cancel') cancelFocus();
     if (command.startsWith('set-active-level:')) setActiveLevel(command.split(':').at(-1));
   });
   api.realtime.onEvent(handleRealtimeEvent);

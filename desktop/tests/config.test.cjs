@@ -7,6 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const {
   DEFAULT_USER_CONFIG,
+  createBackupData,
+  normalizeBackupData,
   normalizeProfile,
   normalizeUserConfig,
   readUserConfig,
@@ -175,8 +177,56 @@ test('normalizes window and preference fields and drops invalid profiles', () =>
     activeProfileId: 'direct-local',
     profiles: { 'direct-local': directProfile() },
     memories: [],
-    focusTimer: null
+    focusTimer: null,
+    todos: [],
+    notes: [],
+    focusStats: { completed: 0, minutes: 0 }
   });
+});
+
+test('normalizes bounded local todos, notes, and focus stats', () => {
+  const value = normalizeUserConfig({
+    todos: [
+      { id: 't1', text: '完成演示', done: false, createdAt: 10, completedAt: null },
+      { id: 't1', text: '重复', done: true, createdAt: 11, completedAt: 12 },
+      { id: 'bad', text: '', done: false, createdAt: 1 }
+    ],
+    notes: [{ id: 'n1', text: '本机便签\n第二行', createdAt: 10, updatedAt: 11 }],
+    focusStats: { completed: 3, minutes: 75 }
+  });
+  assert.deepEqual(value.todos, [{ id: 't1', text: '完成演示', done: false, createdAt: 10, completedAt: null }]);
+  assert.deepEqual(value.notes, [{ id: 'n1', text: '本机便签\n第二行', createdAt: 10, updatedAt: 11 }]);
+  assert.deepEqual(value.focusStats, { completed: 3, minutes: 75 });
+});
+
+test('backup includes only local product data and imports through normal validation', () => {
+  const source = normalizeUserConfig({
+    window: { x: 10, y: 20 },
+    activeProfileId: 'direct-local',
+    profiles: { 'direct-local': sshProfile({ id: 'direct-local', credentialDir: path.join(os.tmpdir(), 'SECRET-CREDENTIALS') }) },
+    preferences: { activeLevel: 'active', voice: false },
+    memories: [{ id: 'm1', kind: 'goal', text: '完成比赛', createdAt: 1, updatedAt: 1 }],
+    todos: [{ id: 't1', text: '离线验收', done: false, createdAt: 2, completedAt: null }],
+    notes: [{ id: 'n1', text: '只在本机', createdAt: 3, updatedAt: 3 }],
+    focusTimer: { state: 'paused', durationMs: 1500000, remainingMs: 600000 },
+    focusStats: { completed: 2, minutes: 50 }
+  });
+  const backup = createBackupData(source, 123);
+  assert.deepEqual(Object.keys(backup), ['version', 'exportedAt', 'preferences', 'memories', 'todos', 'notes', 'focusStats']);
+  assert.equal(JSON.stringify(backup).includes('direct-local'), false);
+  assert.equal(JSON.stringify(backup).includes('SECRET-CREDENTIALS'), false);
+  assert.equal(JSON.stringify(backup).includes('ssh_config'), false);
+  assert.equal(JSON.stringify(backup).includes('focusTimer'), false);
+  assert.deepEqual(normalizeBackupData(backup), {
+    preferences: source.preferences,
+    memories: source.memories,
+    todos: source.todos,
+    notes: source.notes,
+    focusStats: source.focusStats
+  });
+  assert.equal(normalizeBackupData({ version: 1, preferences: {}, memories: [], todos: [], notes: [] }), null);
+  assert.equal(normalizeBackupData({ ...backup, todos: [...backup.todos, { id: '', text: 'bad' }] }), null);
+  assert.equal(normalizeBackupData({ ...backup, preferences: { activeLevel: 'invalid', voice: false, captions: true, openAtLogin: false } }), null);
 });
 
 test('missing and malformed files read as independent defaults', async (t) => {
