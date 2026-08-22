@@ -777,6 +777,7 @@
       if (open) setSurfaceOrigin(surface, source);
       surface.dataset.open = String(open);
       surface.setAttribute('aria-hidden', String(!open));
+      surface.inert = !open;
     }
     $('settingsButton').setAttribute('aria-expanded', String(panel === 'settings'));
     syncPetState();
@@ -2005,11 +2006,25 @@
   $('contextExit').addEventListener('click', () => api.app.quit());
 
   document.addEventListener('keydown', (event) => {
-    if (event.key !== 'Escape' || panel === 'none') return;
-    event.preventDefault();
-    if (panel === 'nudge') dismissNudge();
-    else if (panel === 'assist') finishEngagement();
-    else closePanel();
+    if (panel === 'none') return;
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      if (panel === 'nudge') dismissNudge();
+      else if (panel === 'assist') finishEngagement();
+      else closePanel();
+      return;
+    }
+    if (event.key !== 'Tab') return;
+    const panelId = ({ settings: 'settingsPanel', assist: 'assistCard', nudge: 'nudgeBubble', context: 'contextMenu' })[panel];
+    const surface = panelId && $(panelId);
+    if (!surface) return;
+    const focusable = [...surface.querySelectorAll('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])')]
+      .filter((element) => element.offsetParent !== null && !element.closest('[hidden]'));
+    if (!focusable.length) { event.preventDefault(); surface.focus(); return; }
+    const first = focusable[0];
+    const last = focusable.at(-1);
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
   });
 
   document.addEventListener('keydown', () => { document.body.dataset.inputModality = 'keyboard'; }, true);
@@ -2113,6 +2128,7 @@
   pet.addEventListener('click', (event) => event.preventDefault());
   pet.addEventListener('keydown', (event) => {
     if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); activatePet(); }
+    if (event.key === 'ContextMenu' || (event.key === 'F10' && event.shiftKey)) { event.preventDefault(); openContext(pet); }
   });
   pet.addEventListener('contextmenu', (event) => { event.preventDefault(); openContext(pet); });
 

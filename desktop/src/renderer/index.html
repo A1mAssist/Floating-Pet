@@ -10,7 +10,7 @@
 </head>
 <body data-phase="IDLE_VISIBLE" data-pet-state="idle">
   <main id="stage" aria-label="Floating Pet 桌面陪伴">
-    <section id="settingsPanel" class="surface settings-panel interactive" data-open="false" aria-labelledby="settingsTitle" aria-hidden="true">
+    <section id="settingsPanel" class="surface settings-panel interactive" data-open="false" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" aria-hidden="true" inert tabindex="-1">
       <header class="surface-header">
         <div><p class="eyebrow">控制中心</p><h1 id="settingsTitle">陪伴设置</h1></div>
         <button id="closeSettings" class="icon-button" type="button" aria-label="关闭设置" data-tooltip="关闭"><img src="icons/x.svg" alt=""></button>
@@ -41,11 +41,11 @@
         <div class="group-heading"><h2 id="inputHeading">感知输入</h2><span id="sessionRequirement">需先开始陪伴</span></div>
         <label class="setting-row" for="micToggle">
           <span class="setting-label"><img src="icons/mic.svg" alt=""><span>麦克风<small id="micStatus">已关闭</small></span></span>
-          <span class="switch"><input id="micToggle" data-testid="input-microphone" type="checkbox"><span></span></span>
+          <span class="switch"><input id="micToggle" data-testid="input-microphone" type="checkbox" aria-label="启用麦克风"><span></span></span>
         </label>
         <label class="setting-row" for="cameraToggle">
           <span class="setting-label"><img src="icons/video.svg" alt=""><span>摄像头<small id="cameraStatus">已关闭</small></span></span>
-          <span class="switch"><input id="cameraToggle" data-testid="input-camera" type="checkbox"><span></span></span>
+          <span class="switch"><input id="cameraToggle" data-testid="input-camera" type="checkbox" aria-label="启用摄像头"><span></span></span>
         </label>
         <div class="setting-row screen-row">
           <span class="setting-label"><img src="icons/monitor-up.svg" alt=""><span>屏幕<small id="screenStatus">已关闭</small></span></span>
@@ -103,7 +103,7 @@
       </div>
     </section>
 
-    <section id="assistCard" class="surface assist-card interactive" data-open="false" aria-labelledby="assistTitle" aria-hidden="true">
+    <section id="assistCard" class="surface assist-card interactive" data-open="false" role="dialog" aria-modal="true" aria-labelledby="assistTitle" aria-hidden="true" inert tabindex="-1">
       <header class="surface-header">
         <div><p class="eyebrow"><span class="model-dot"></span><span id="modelLabel">模型 Adapter</span></p><h1 id="assistTitle">一起看看</h1></div>
         <button id="closeAssist" class="icon-button" type="button" aria-label="收起协助卡" data-tooltip="收起"><img src="icons/x.svg" alt=""></button>
@@ -138,13 +138,13 @@
       </form>
     </section>
 
-    <section id="nudgeBubble" class="surface nudge-bubble interactive" data-open="false" data-testid="nudge" aria-label="主动询问" aria-hidden="true">
+    <section id="nudgeBubble" class="surface nudge-bubble interactive" data-open="false" role="dialog" aria-modal="true" data-testid="nudge" aria-label="主动询问" aria-hidden="true" inert tabindex="-1">
       <p class="eyebrow"><span class="model-dot"></span><span id="nudgeModelLabel">本地线索</span></p>
       <p id="nudgeText">这个错误似乎重复出现，需要我一起看看吗？</p>
       <div class="action-row"><button id="acceptNudge" data-testid="nudge-accept" class="button primary" type="button">一起看看</button><button id="dismissNudge" data-testid="nudge-decline" class="button quiet" type="button">不用</button></div>
     </section>
 
-    <div id="contextMenu" class="surface context-menu interactive" data-open="false" role="menu" aria-hidden="true">
+    <div id="contextMenu" class="surface context-menu interactive" role="menu" aria-label="桌宠菜单" aria-hidden="true" inert tabindex="-1">
       <button id="contextSession" type="button" role="menuitem"><img id="contextSessionPlayIcon" src="icons/play.svg" alt=""><img id="contextSessionStopIcon" src="icons/circle-stop.svg" alt="" hidden><span>开始陪伴</span></button>
       <button id="contextPause" type="button" role="menuitem"><img src="icons/pause.svg" alt=""><span>暂停采集</span></button>
       <button id="contextDnd" type="button" role="menuitem"><img src="icons/moon.svg" alt=""><span>勿扰</span></button>
@@ -164,7 +164,7 @@
 
     <div id="petStatus" class="pet-status interactive" data-testid="status-session" data-state="IDLE_VISIBLE"><span class="status-light"></span><span id="statusText">感知关闭</span><span id="modelBadge" class="fake-badge">Model</span></div>
 
-    <button id="pet" class="pet interactive" type="button" aria-label="Floating Pet 桌宠，拖动移动，单击互动">
+    <button id="pet" class="pet interactive" type="button" aria-label="Floating Pet 桌宠，拖动移动，单击互动" aria-haspopup="menu">
       <span class="pet-shadow"></span>
       <svg class="pet-art" viewBox="0 0 256 256" aria-hidden="true" focusable="false">
         <g id="pet-character" class="pet-character">
