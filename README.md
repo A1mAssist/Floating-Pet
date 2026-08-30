@@ -14,6 +14,7 @@ Windows 桌面悬浮陪伴应用，使用 Electron 提供透明置顶界面，�
 - `service/`：Python 模型适配服务。把回合制多模态和 Realtime 音视频协议收敛为客户端可用的接口。
 - `harmony/`：HarmonyOS NEXT PC 工程，复用 Renderer，并通过 ArkTS 能力桥接系统侧能力。
 - `submission/floating-pet-promo.html`：比赛提交用单文件宣传页，使用现有产品角色和托盘 Logo，可离线打开；宣传片通过本地选择器播放，不依赖网络。
+- `submission/openbmb-project-description.md`：面向 OpenBMB 比赛评审的项目说明，可作为报名表或提交包中的项目介绍。
 - `docs/`：产品、模型服务、部署和验收记录。
 
 ### 快速体验
