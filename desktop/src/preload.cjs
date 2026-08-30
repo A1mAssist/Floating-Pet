@@ -4,10 +4,12 @@ const { contextBridge, ipcRenderer } = require('electron');
 
 const TEST_MODE = process.argv.includes('--pet-test-mode');
 const FAKE_MODEL = process.argv.includes('--pet-fake-model') || TEST_MODE;
+const DEMO_MODE = process.argv.includes('--pet-demo-mode');
 
 const api = {
   runtime: Object.freeze({
     fakeModel: FAKE_MODEL,
+    demoMode: DEMO_MODE,
     modelLabel: FAKE_MODEL ? 'Fake Adapter' : 'Ascend MiniCPM-o',
     testMode: TEST_MODE
   }),

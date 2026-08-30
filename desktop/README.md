@@ -40,6 +40,12 @@ npm start
 npm run start:fake
 ```
 
+不申请麦克风、摄像头或屏幕权限，并自动演示“重复线索 → 主动询问”的 Windows Mock 使用：
+
+```bash
+npm run start:demo
+```
+
 左键或聚焦桌宠后按 Enter 开始陪伴，右键打开控制菜单。媒体输入默认关闭；先在“陪伴设置”中开启麦克风，再进入协助卡点击“实时对话”。仅开启麦克风时使用 `mode=audio`；摄像头或屏幕可用时使用 `mode=video`，服务适配层会把音频加视觉输入映射到目标模型的 `mode=omni`。
 
 ### 模型连接配置

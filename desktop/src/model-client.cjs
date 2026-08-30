@@ -21,11 +21,11 @@ const NO_CAPABILITIES = Object.freeze({
   audioOutput: false
 });
 const SCREEN_CUE_PROMPT = [
-  '只判断当前屏幕是否反复出现同一个错误，或用户是否反复尝试同一个未成功的操作。',
-  '没有明确重复时只输出 null。',
-  '有明确重复时只输出一行 JSON，且只能包含 kind、anchor、summary 三个字段。',
-  'kind 只能是 repeated_error 或 repeated_attempt；anchor 只能用小写字母、数字、点、下划线、短横线；summary 不超过 160 个字符。',
-  '不要输出建议、路径、网址、命令或 Markdown。'
+  '只提取当前屏幕中与用户当前任务直接相关的线索：反复错误、反复失败操作、会议或页面中的关键要求、当前页面缺少的要求。',
+  '没有明确线索时只输出 null。',
+  '有明确线索时只输出一行 JSON。kind 只能是 repeated_error、repeated_attempt、meeting_fact、missing_requirement。',
+  '除 missing_requirement 外只能包含 kind、anchor、summary；missing_requirement 必须额外包含 nextStep。anchor 只能用小写字母、数字、点、下划线、短横线。',
+  'summary 和 nextStep 各不超过 160 个字符；不要输出解释、路径、网址、命令或 Markdown。'
 ].join('');
 
 async function readBoundedText(response) {
@@ -196,17 +196,23 @@ function parseCueCandidate(text) {
     return null;
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  if (Object.keys(value).sort().join(',') !== 'anchor,kind,summary') return null;
-  if (!['repeated_error', 'repeated_attempt'].includes(value.kind)) return null;
+  const keys = Object.keys(value).sort().join(',');
+  if (!['anchor,kind,summary', 'anchor,kind,nextStep,summary'].includes(keys)) return null;
+  if (!['repeated_error', 'repeated_attempt', 'meeting_fact', 'missing_requirement'].includes(value.kind)) return null;
+  if (value.kind === 'missing_requirement' && keys !== 'anchor,kind,nextStep,summary') return null;
+  if (value.kind !== 'missing_requirement' && keys !== 'anchor,kind,summary') return null;
   if (typeof value.anchor !== 'string' || !/^[a-z0-9._-]{1,80}$/.test(value.anchor)) return null;
   if (typeof value.summary !== 'string' || !value.summary.trim() || value.summary.length > 160) return null;
+  if (value.kind === 'missing_requirement' && (typeof value.nextStep !== 'string' || !value.nextStep.trim() || value.nextStep.length > 160)) return null;
   if (/[\u0000-\u001f\u007f]|https?:\/\/|\bwww\.|file:|[\\/]/i.test(value.summary)) return null;
-  const digest = createHash('sha256').update(`${value.kind}\0${value.anchor}`).digest('hex').slice(0, 16);
+  if (value.kind === 'missing_requirement' && (/[\u0000-\u001f\u007f]/.test(value.nextStep) || /https?:\/\/|\bwww\.|file:/i.test(value.nextStep) || /[\\/]/.test(value.nextStep))) return null;
+  const digest = createHash('sha256').update(value.anchor).digest('hex').slice(0, 16);
   return {
     eventKey: `screen-${digest}`,
     kind: value.kind,
     source: 'screen',
-    summary: value.summary.trim()
+    summary: value.summary.trim(),
+    nextStep: value.kind === 'missing_requirement' ? value.nextStep.trim() : null
   };
 }
 

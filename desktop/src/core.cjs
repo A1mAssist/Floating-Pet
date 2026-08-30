@@ -101,16 +101,21 @@ function decideNudge({ phase, activeLevel = 'balanced', dnd, presentationMode, c
   for (const eventKey of keys) {
     const rows = eligible.filter((item) => item.eventKey === eventKey && nowMs - item.observedAtMs <= SCREEN_OBSERVATION_WINDOW_MS);
     const taskComplete = activeLevel === 'active' && rows.length === 1 && rows[0].kind === 'task_complete' && rows[0].source === 'timer';
+    const missingRequirement = rows.length === 1 && rows[0].kind === 'missing_requirement';
     const repeated = rows.length >= 2 && rows.at(-1).observedAtMs - rows[0].observedAtMs >= 5000;
-    if (taskComplete || repeated) return { action: 'nudge', eventKey, reason: taskComplete ? 'task_complete' : 'two_observations' };
+    if (taskComplete || missingRequirement || repeated) return {
+      action: 'nudge',
+      eventKey,
+      reason: taskComplete ? 'task_complete' : missingRequirement ? 'missing_requirement' : 'two_observations'
+    };
   }
   return { action: 'suppress', reason: 'insufficient_evidence' };
 }
 
 function nudgePrompt(kind) {
-  return kind === 'repeated_attempt'
-    ? '这个操作似乎重复了几次，需要我一起看看吗？'
-    : '这个错误似乎重复出现，需要我一起看看吗？';
+  if (kind === 'repeated_attempt') return '这个操作似乎重复了几次，需要我一起看看吗？';
+  if (kind === 'missing_requirement') return '当前页面似乎少了一项要求，需要我一起补上吗？';
+  return '这个错误似乎重复出现，需要我一起看看吗？';
 }
 
 function fakeReply(input, turn) {

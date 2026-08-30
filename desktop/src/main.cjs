@@ -22,7 +22,8 @@ const {
 
 const ROOT = path.resolve(__dirname, '..');
 const TEST_MODE = process.argv.includes('--test-mode');
-const FAKE_MODEL = process.argv.includes('--fake-model');
+const DEMO_MODE = process.argv.includes('--demo');
+const FAKE_MODEL = process.argv.includes('--fake-model') || DEMO_MODE;
 const smokeIndex = process.argv.indexOf('--smoke-report');
 const SMOKE_REPORT = smokeIndex >= 0 ? path.resolve(process.argv[smokeIndex + 1] || '') : null;
 const WINDOW_SIZE = { width: 460, height: 640 };
@@ -356,7 +357,8 @@ function createWindow() {
       devTools: TEST_MODE,
       additionalArguments: [
         ...(TEST_MODE ? ['--pet-test-mode'] : []),
-        ...(FAKE_MODEL ? ['--pet-fake-model'] : [])
+        ...(FAKE_MODEL ? ['--pet-fake-model'] : []),
+        ...(DEMO_MODE ? ['--pet-demo-mode'] : [])
       ]
     }
   });

@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="浮伴 Floating Pet：看见现场，先问一句，再和你一起解决。">
+  <title>浮伴 Floating Pet · MiniCPM-o 4.5</title>
+  <style>
+    :root { color-scheme: light; --paper: #edf3f2; --surface: #f9fcfb; --ink: #172126; --muted: #637172; --line: #cbd5d1; --teal: #167a70; --teal-soft: #d9eee8; --max: 1160px; font-family: "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
+    body { margin: 0; background: var(--paper); color: var(--ink); font: 16px/1.65 system-ui, sans-serif; }
+    a { color: inherit; text-decoration: none; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+    .wrap { width: min(var(--max), calc(100% - 56px)); margin: 0 auto; }
+    .topbar { position: sticky; top: 0; z-index: 10; border-bottom: 1px solid rgba(23, 33, 38, .12); background: rgba(243, 241, 234, .92); backdrop-filter: blur(14px); }
+    .topbar-inner { display: flex; min-height: 68px; align-items: center; justify-content: space-between; gap: 24px; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 780; }
+    .brand-mark { display: grid; width: 34px; height: 34px; place-items: center; overflow: hidden; border: 1px solid var(--line); border-radius: 9px; background: #172126; }
+    .brand-mark img { display: block; width: 28px; height: 28px; object-fit: contain; }
+    .brand small { display: block; color: var(--muted); font-size: 11px; font-weight: 500; }
+    nav { display: flex; gap: 24px; color: var(--muted); font-size: 13px; }
+    nav a:hover, nav a:focus-visible { color: var(--teal); }
+    :focus-visible { outline: 3px solid var(--teal); outline-offset: 4px; }
+    .hero { padding: 86px 0 88px; border-bottom: 1px solid var(--line); }
+    .hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(380px, .86fr); align-items: center; gap: 70px; }
+    .kicker { display: flex; align-items: center; gap: 9px; margin-bottom: 20px; color: var(--teal); font-size: 12px; font-weight: 760; letter-spacing: .1em; text-transform: uppercase; }
+    .kicker::before { content: ""; width: 26px; height: 2px; background: var(--teal); }
+    h1, h2, h3, p { margin: 0; }
+    h1 { max-width: 600px; font-size: clamp(40px, 4.6vw, 58px); line-height: 1.08; letter-spacing: -.035em; }
+    .hero-copy { max-width: 540px; margin-top: 22px; color: var(--muted); font-size: 18px; }
+    .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
+    .asset-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .button { display: inline-flex; min-height: 45px; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--ink); border-radius: 5px; padding: 0 17px; background: transparent; color: var(--ink); font-weight: 700; }
+    .button:hover { border-color: var(--teal); color: var(--teal); }
+    .button.primary { border-color: var(--teal); background: var(--teal); color: #fff; }
+    .button.primary:hover { border-color: #075f56; background: #075f56; }
+    .pet-stage { position: relative; min-height: 430px; border: 1px solid var(--ink); border-radius: 18px; background: var(--surface); overflow: hidden; box-shadow: 12px 12px 0 var(--teal-soft); }
+    .pet-stage::before { content: "FLOATING PET / DESKTOP"; position: absolute; top: 20px; left: 22px; color: var(--muted); font: 11px/1.2 ui-monospace, monospace; letter-spacing: .12em; }
+    .status-pill { position: absolute; top: 18px; right: 20px; display: flex; align-items: center; gap: 8px; border: 1px solid var(--line); border-radius: 999px; padding: 6px 11px; color: var(--muted); background: var(--paper); font-size: 12px; }
+    .status-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
+    .pet-svg { position: absolute; right: 11%; bottom: 15%; width: min(270px, 60%); color: var(--teal); filter: drop-shadow(0 16px 12px rgba(23, 33, 38, .17)); }
+    .signal { position: absolute; left: 22px; bottom: 21px; max-width: 240px; color: var(--ink); font-size: 13px; }
+    .signal em { display: block; margin-top: 4px; color: var(--teal); font-style: normal; font-size: 11px; }
+    section.content { padding: 88px 0; border-bottom: 1px solid var(--line); }
+    .section-head { max-width: 760px; margin-bottom: 38px; }
+    .section-head h2 { max-width: 600px; font-size: clamp(31px, 4vw, 47px); line-height: 1.12; letter-spacing: -.025em; }
+    .section-head p { max-width: 560px; margin-top: 14px; color: var(--muted); }
+    .principles { border-top: 1px solid var(--ink); }
+    .principle { display: grid; grid-template-columns: 92px minmax(170px, .65fr) 1fr; gap: 28px; align-items: baseline; padding: 22px 0; border-bottom: 1px solid var(--line); }
+    .principle .num { color: var(--teal); font: 12px/1 ui-monospace, monospace; }
+    .principle h3 { font-size: 22px; }
+    .principle p { color: var(--muted); font-size: 14px; }
+    .film-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); gap: 34px; align-items: stretch; }
+    .film-frame { position: relative; min-height: 365px; border: 1px solid var(--ink); border-radius: 8px; background: #172126; overflow: hidden; }
+    .film-frame video { display: block; width: 100%; height: 100%; min-height: 365px; object-fit: cover; background: #172126; }
+    .film-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 30px; color: #fff; text-align: center; pointer-events: none; }
+    .film-empty > div { max-width: 320px; }
+    .film-empty strong { display: block; font-size: 20px; }
+    .film-empty span { display: block; margin-top: 8px; color: #b8c7c4; font-size: 13px; }
+    .film-frame.has-video .film-empty { display: none; }
+    .film-side { display: flex; flex-direction: column; justify-content: space-between; border-top: 2px solid var(--teal); padding-top: 18px; }
+    .film-side h3 { max-width: 300px; font-size: 27px; line-height: 1.2; }
+    .film-side p { margin-top: 12px; color: var(--muted); }
+    .film-side label { display: inline-flex; width: fit-content; margin-top: 22px; }
+    .film-side input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+    .film-caption { padding-top: 22px; color: var(--teal); font-size: 12px; }
+    .capabilities { display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; border-top: 1px solid var(--ink); }
+    .capability { min-height: 170px; padding: 24px 0 28px; border-bottom: 1px solid var(--line); }
+    .capability h3 { margin-top: 13px; font-size: 21px; }
+    .capability p { max-width: 430px; margin-top: 7px; color: var(--muted); font-size: 14px; }
+    .capability b { color: var(--teal); font: 12px/1 ui-monospace, monospace; }
+    .proof { display: grid; grid-template-columns: repeat(4, 1fr); border-top: 1px solid var(--ink); }
+    .proof-item { min-height: 150px; border-right: 1px solid var(--line); padding: 20px 20px 14px 0; }
+    .proof-item + .proof-item { padding-left: 20px; }
+    .proof-item:last-child { border-right: 0; }
+    .proof-item strong { display: block; color: var(--teal); font-size: 24px; line-height: 1.15; }
+    .proof-item span { display: block; margin-top: 8px; color: var(--muted); font-size: 13px; }
+    footer { padding: 28px 0 42px; color: var(--muted); font-size: 12px; }
+    footer .wrap { display: flex; justify-content: space-between; gap: 20px; }
+    @media (max-width: 820px) { .wrap { width: min(var(--max), calc(100% - 34px)); } nav { display: none; } .hero { padding-top: 60px; } .hero-grid, .film-layout { grid-template-columns: 1fr; gap: 40px; } .pet-stage { min-height: 360px; } .principle { grid-template-columns: 64px 1fr; gap: 12px 20px; } .principle p { grid-column: 2; } .capabilities { column-gap: 26px; } .proof { grid-template-columns: 1fr 1fr; } .proof-item:nth-child(2) { border-right: 0; } .proof-item:nth-child(3) { padding-left: 0; } }
+    @media (max-width: 560px) { h1 { font-size: 43px; } .hero-copy { font-size: 17px; } .section-head { display: block; } .section-head p { margin-top: 14px; } .capabilities, .proof { grid-template-columns: 1fr; } .proof-item, .proof-item + .proof-item { border-right: 0; padding: 18px 0; } .pet-stage { min-height: 315px; box-shadow: 7px 7px 0 var(--teal-soft); } footer .wrap { display: block; } footer p + p { margin-top: 8px; } }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap topbar-inner">
+      <a class="brand" href="#top" aria-label="浮伴首页"><span class="brand-mark"><img src="data:image/png;base64,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" alt=""></span><span>浮伴<small>Floating Pet · MiniCPM-o 4.5</small></span></a>
+      <nav aria-label="页面导航"><a href="#why">为什么是浮伴</a><a href="#film">宣传片</a><a href="#capabilities">能力</a><a href="#proof">体验闭环</a></nav>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="kicker">Desktop companion / multimodal</p>
+          <h1>看见现场，先问一句。</h1>
+          <p class="hero-copy">浮伴安静地住在桌面上。需要时，它把眼前的线索、你的话和上下文放在一起，陪你把问题往前推一步。</p>
+          <div class="hero-actions"><a class="button primary" href="#film">观看宣传片</a><a class="button" href="../desktop/release/Floating-Pet-Demo-Portable-0.1.0-x64.exe">下载 Windows Demo</a></div>
+          <p class="asset-note">提交时请把 HTML 与 desktop/release 目录一起保留。</p>
+        </div>
+        <div class="pet-stage" aria-label="浮伴桌面陪伴预览">
+          <span class="status-pill"><i></i>陪伴中 · 输入关闭</span>
+          <svg class="pet-svg" viewBox="0 0 256 256" role="img" aria-label="浮伴软瓷感知猫">
+            <defs>
+              <g id="pet-tail"><path fill="#bdd2cc" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M176 166c31-15 55 1 54 25-1 26-25 42-53 28l6-18c16 8 29 2 30-10 1-11-11-16-29-8z"/><path fill="none" stroke="#f8fbfa" stroke-opacity=".7" stroke-width="5" stroke-linecap="round" d="M190 174c17-5 29 2 29 16"/></g>
+              <g id="pet-body"><path fill="#dce8e5" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M78 139c-20 17-25 48-13 70 12 23 37 31 64 31 31 0 55-6 67-29 12-23 6-55-17-72z"/><path fill="#f7faf9" d="M90 153c-15 14-17 40-7 56 10 17 29 21 51 21 22 0 40-4 51-18 7-11 7-27 2-39-13 18-32 27-57 27-20 0-33-16-40-47z"/><path fill="none" stroke="#fff" stroke-opacity=".78" stroke-width="6" stroke-linecap="round" d="M91 158c-8 11-11 24-8 38"/></g>
+              <g id="pet-ear-left"><path fill="#f5f9f7" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M69 91c-8-15-13-40-7-61 1-5 6-6 10-3l41 31z"/><path fill="#198579" d="m70 42 27 20-25 15c-2-11-3-23-2-35z"/><path fill="none" stroke="#fff" stroke-opacity=".66" stroke-width="4" stroke-linecap="round" d="M68 34c-1 9 0 19 2 28"/></g>
+              <g id="pet-ear-right"><path fill="#f5f9f7" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M187 91c8-15 13-40 7-61-1-5-6-6-10-3l-41 31z"/><path fill="#198579" d="m186 42-27 20 25 15c2-11 3-23 2-35z"/><path fill="none" stroke="#fff" stroke-opacity=".66" stroke-width="4" stroke-linecap="round" d="M188 34c1 9 0 19-2 28"/></g>
+              <g id="pet-head"><path fill="#f7faf9" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M63 79c-9 13-13 30-13 48 0 39 29 62 78 62s78-23 78-62c0-18-4-35-13-48-13-20-37-31-65-31S76 59 63 79z"/><path fill="#fff" d="M72 82c12-18 33-27 58-27 18 0 33 4 45 12-40-2-68 13-86 48-7 15-10 31-8 48-16-10-23-23-23-39 0-16 4-31 14-42z" opacity=".8"/><path fill="#e9f1ef" d="M176 74c15 13 22 30 22 51 0 34-25 54-70 54 34-8 52-31 52-69 0-13-1-25-4-36z" opacity=".72"/><ellipse cx="83" cy="145" rx="13" ry="7" fill="#e87968" opacity=".16"/><ellipse cx="173" cy="145" rx="13" ry="7" fill="#e87968" opacity=".16"/><path fill="none" stroke="#fff" stroke-opacity=".88" stroke-width="6" stroke-linecap="round" d="M76 87c10-15 27-23 49-25"/></g>
+              <g id="pet-eyes"><ellipse cx="94" cy="119" rx="17" ry="22" fill="#fff" stroke="#17343a" stroke-width="4"/><ellipse cx="162" cy="119" rx="17" ry="22" fill="#fff" stroke="#17343a" stroke-width="4"/><ellipse cx="97" cy="122" rx="9" ry="12" fill="#153239"/><ellipse cx="159" cy="122" rx="9" ry="12" fill="#153239"/><circle cx="94" cy="117" r="3" fill="#fff"/><circle cx="156" cy="117" r="3" fill="#fff"/><circle cx="101" cy="127" r="2" fill="#70b5aa" opacity=".72"/><circle cx="163" cy="127" r="2" fill="#70b5aa" opacity=".72"/></g>
+              <g id="pet-mouth"><path fill="#df6b59" stroke="#17343a" stroke-width="3" stroke-linejoin="round" d="M119 146c0-7 18-7 18 0 0 6-4 9-9 9s-9-3-9-9z"/><path fill="none" stroke="#17343a" stroke-width="5" stroke-linecap="round" d="M128 155v6m0 0c-7 0-11-3-14-7m14 7c7 0 11-3 14-7"/></g>
+              <g id="pet-paw"><path fill="#f7faf9" stroke="#17343a" stroke-width="6" stroke-linejoin="round" d="M84 174c-13 1-21 13-18 25 3 11 15 16 27 10 9-5 13-15 8-24-3-7-9-11-17-11z"/><path fill="none" stroke="#bdd2cc" stroke-width="3" stroke-linecap="round" d="M78 196c6 4 12 4 18 0"/></g>
+              <g id="pet-core"><circle cx="166" cy="198" r="23" fill="#eef5f3" stroke="#17343a" stroke-width="6"/><circle cx="166" cy="198" r="11" fill="none" stroke="#168c7d" stroke-width="5"/><circle cx="166" cy="198" r="4" fill="#168c7d"/><circle cx="176" cy="187" r="3" fill="#168c7d"/></g>
+            </defs>
+            <use href="#pet-tail"/><use href="#pet-body"/><use href="#pet-ear-left"/><use href="#pet-ear-right"/><use href="#pet-head"/><use href="#pet-eyes"/><use href="#pet-mouth"/><use href="#pet-paw"/><use href="#pet-core"/>
+          </svg>
+          <p class="signal">“我在这里。需要时叫我。”<em>字幕始终可用 · 语音可关闭</em></p>
+        </div>
+      </div>
+    </section>
+
+    <section id="why" class="content">
+      <div class="wrap">
+        <div class="section-head"><h2>陪伴的边界，先交还给你。</h2><p>把“看见”和“介入”拆开。浮伴只有在你允许时才感知，也只有在重复线索被确认后才开口。</p></div>
+        <div class="principles">
+          <article class="principle"><span class="num">01</span><h3>安静存在</h3><p>透明置顶、边缘吸附、托盘与键盘操作，让它融入工作流，不把工作变成舞台。</p></article>
+          <article class="principle"><span class="num">02</span><h3>带着上下文</h3><p>同一个问题再次出现时，浮伴先问一句，再把当前会话线索带进协助卡。</p></article>
+          <article class="principle"><span class="num">03</span><h3>随时收回</h3><p>麦克风、摄像头、屏幕、勿扰和结束陪伴，都由用户明确控制。</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="film" class="content">
+      <div class="wrap">
+        <div class="section-head"><h2>把产品流程交给真实画面。</h2><p>页面不重绘产品界面。选择提交包里的成片，即可在这里播放。</p></div>
+        <div class="film-layout">
+          <div id="filmFrame" class="film-frame">
+            <video id="filmVideo" controls playsinline preload="metadata" aria-label="浮伴宣传片本地预览"></video>
+            <div class="film-empty"><div><strong>宣传片播放位</strong><span>选择本地视频后即可预览。页面本身不依赖网络。</span></div></div>
+          </div>
+          <div class="film-side"><div><h3>从卡住，到一起看看。</h3><p>展示默认安静、重复确认、主动询问、协助卡和用户收权的完整闭环。</p><label class="button primary" for="filmPicker">选择本地视频</label><input id="filmPicker" type="file" accept="video/*" aria-describedby="filmHint"><p id="filmHint" class="film-caption">本地播放 · 无外部依赖</p></div><p class="film-caption">视频不会上传。</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section id="capabilities" class="content">
+      <div class="wrap">
+        <div class="section-head"><h2>它把复杂的事，留在需要的时刻。</h2><p>从桌面形态到模型链路，每一层都对应一个可验证的用户动作。</p></div>
+        <div class="capabilities">
+          <article class="capability"><b>DESKTOP / 01</b><h3>透明置顶的桌面形态</h3><p>常驻、拖拽、边缘吸附、托盘与键盘操作，让陪伴融入工作流。</p></article>
+          <article class="capability"><b>PERCEPTION / 02</b><h3>按需开启的多模态输入</h3><p>麦克风、摄像头和指定屏幕独立授权；暂停或结束时停止媒体轨道。</p></article>
+          <article class="capability"><b>CONTEXT / 03</b><h3>有边界的主动协助</h3><p>重复错误、重复尝试和缺失要求经过结构化校验，再进入询问。</p></article>
+          <article class="capability"><b>REALTIME / 04</b><h3>显式开启的实时链路</h3><p>支持增量文字与音频输入输出；Windows Demo 默认静音。</p></article>
+        </div>
+      </div>
+    </section>
+
+    <section id="proof" class="content">
+      <div class="wrap">
+        <div class="section-head"><h2>从看见，到一起解决。</h2><p>每一步都放在用户手里：先安静存在，再按需感知；线索被再次确认后，才发起一次可拒绝的询问。</p></div>
+        <div class="proof"><div class="proof-item"><strong>默认关闭</strong><span>没有明确授权，就不采集麦克风、摄像头或屏幕。</span></div><div class="proof-item"><strong>逐项开启</strong><span>每一种输入独立控制，摄像头和屏幕来源清晰可见。</span></div><div class="proof-item"><strong>再次确认</strong><span>同一问题重复出现后，先问一句“需要我一起看看吗？”</span></div><div class="proof-item"><strong>随时收回</strong><span>勿扰、暂停采集和结束陪伴都会立即停止输入链路。</span></div></div>
+      </div>
+    </section>
+  </main>
+
+  <footer><div class="wrap"><p>浮伴 Floating Pet · MiniCPM-o 4.5</p><p>默认安静，按需开启，随时收回。</p></div></footer>
+  <script>
+    const picker = document.getElementById('filmPicker');
+    const video = document.getElementById('filmVideo');
+    const frame = document.getElementById('filmFrame');
+    const hint = document.getElementById('filmHint');
+    let objectUrl = '';
+    picker.addEventListener('change', () => {
+      const [file] = picker.files || [];
+      if (!file) return;
+      if (!file.type.startsWith('video/')) {
+        hint.textContent = '请选择视频文件。';
+        return;
+      }
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+      objectUrl = URL.createObjectURL(file);
+      video.src = objectUrl;
+      frame.classList.add('has-video');
+      hint.textContent = '正在播放本地视频，不会上传。';
+      video.play().catch(() => {});
+    });
+  </script>
+</body>
+</html>

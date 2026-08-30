@@ -6,6 +6,8 @@ __pycache__/
 /handoff.md
 /docs/superpowers/plans/
 /.superpowers/
+/.artifacts/
+/.hvigor/
 desktop/release-preview.png
 desktop/release-realtime-preview.png
 desktop/release/

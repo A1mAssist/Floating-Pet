@@ -200,6 +200,20 @@ test('parses only a bounded screen cue schema', () => {
   assert.equal(valid.kind, 'repeated_error');
   assert.equal(valid.source, 'screen');
   assert.match(valid.eventKey, /^screen-[a-f0-9]{16}$/);
+  assert.equal(valid.nextStep, null);
+  const requirement = parseCueCandidate(JSON.stringify({
+    kind: 'missing_requirement',
+    anchor: 'identity-proof',
+    summary: '当前页面缺少身份证明',
+    nextStep: '添加身份证明后重新提交'
+  }));
+  assert.equal(requirement.kind, 'missing_requirement');
+  assert.equal(requirement.nextStep, '添加身份证明后重新提交');
+  assert.equal(requirement.eventKey, parseCueCandidate(JSON.stringify({
+    kind: 'meeting_fact',
+    anchor: 'identity-proof',
+    summary: '会议要求准备身份证明'
+  })).eventKey);
   const invalid = [
     'null',
     '{not-json',
@@ -208,7 +222,9 @@ test('parses only a bounded screen cue schema', () => {
     JSON.stringify({ kind: 'repeated_error', anchor: 'same', summary: '打开 https://example.com' }),
     JSON.stringify({ kind: 'repeated_error', anchor: 'same', summary: '打开 www.example.com' }),
     JSON.stringify({ kind: 'repeated_error', anchor: 'same', summary: '读取 /home/user/secret.txt' }),
-    JSON.stringify({ kind: 'repeated_error', anchor: 'same', summary: '重复', command: 'run' })
+    JSON.stringify({ kind: 'repeated_error', anchor: 'same', summary: '重复', command: 'run' }),
+    JSON.stringify({ kind: 'missing_requirement', anchor: 'same', summary: '缺少材料', nextStep: '打开 https://example.com' }),
+    JSON.stringify({ kind: 'missing_requirement', anchor: 'same', summary: '缺少材料' })
   ];
   for (const value of invalid) assert.equal(parseCueCandidate(value), null);
 });

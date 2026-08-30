@@ -111,6 +111,21 @@ test('camera-only observations cannot drive proactive policy', () => {
 test('nudge wording follows the matched observation kind', () => {
   assert.equal(nudgePrompt('repeated_attempt'), '这个操作似乎重复了几次，需要我一起看看吗？');
   assert.equal(nudgePrompt('repeated_error'), '这个错误似乎重复出现，需要我一起看看吗？');
+  assert.equal(nudgePrompt('missing_requirement'), '当前页面似乎少了一项要求，需要我一起补上吗？');
+});
+
+test('a missing requirement can surface as one bounded proactive cue', () => {
+  const decision = decideNudge({
+    phase: PHASES.ACTIVE,
+    activeLevel: 'balanced',
+    dnd: false,
+    presentationMode: false,
+    cooldownUntilMs: 0,
+    seenEventKeys: [],
+    nowMs: 10000,
+    observations: [{ eventKey: 'screen-id', kind: 'missing_requirement', source: 'screen', observedAtMs: 10000 }]
+  });
+  assert.deepEqual(decision, { action: 'nudge', eventKey: 'screen-id', reason: 'missing_requirement' });
 });
 
 test('fake adapter has deterministic success and truthful failure', () => {

@@ -3,6 +3,7 @@
 
   const { PHASES, initialState, transition, decideNudge, nudgePrompt } = window.FloatingPetCore;
   const api = window.pet;
+  const demoMode = api.runtime.demoMode === true;
   const $ = (id) => document.getElementById(id);
   const inputNames = { microphone: '麦克风', camera: '摄像头', screen: '屏幕' };
   const inputControls = { microphone: $('micToggle'), camera: $('cameraToggle'), screen: $('screenToggle') };
@@ -35,6 +36,7 @@
   let fakeClockOffsetMs = 0;
   let observations = [];
   let latestObservationSummary = null;
+  let latestObservationNextStep = null;
   let cueTimer = null;
   let toastTimer = null;
   let captionTimer = null;
@@ -94,7 +96,7 @@
 
   const settings = {
     activeLevel: 'balanced',
-    voice: !api.runtime.testMode,
+    voice: !api.runtime.testMode && !demoMode,
     captions: true,
     openAtLogin: false,
     dnd: false,
@@ -595,9 +597,11 @@
     if (value == null) return null;
     if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
     if (!/^screen-[a-f0-9]{16}$/.test(value.eventKey)) return undefined;
-    if (!['repeated_error', 'repeated_attempt'].includes(value.kind) || value.source !== 'screen') return undefined;
+    if (!['repeated_error', 'repeated_attempt', 'meeting_fact', 'missing_requirement'].includes(value.kind) || value.source !== 'screen') return undefined;
     if (typeof value.summary !== 'string' || !value.summary.trim() || value.summary.length > 160 || /[\u0000-\u001f\u007f]/.test(value.summary)) return undefined;
-    return { eventKey: value.eventKey, kind: value.kind, source: 'screen', summary: value.summary.trim() };
+    if (value.kind === 'missing_requirement' && (typeof value.nextStep !== 'string' || !value.nextStep.trim() || value.nextStep.length > 160
+      || /[\u0000-\u001f\u007f]|https?:\/\/|\bwww\.|file:|[\\/]/i.test(value.nextStep))) return undefined;
+    return { eventKey: value.eventKey, kind: value.kind, source: 'screen', summary: value.summary.trim(), nextStep: value.kind === 'missing_requirement' ? value.nextStep.trim() : null };
   }
 
   function scheduleScreenAnalysis(delayMs = SCREEN_ANALYSIS_INTERVAL_MS) {
@@ -1033,7 +1037,7 @@
       inputControls[kind].checked = false;
       return showToast('当前模型能力不使用此输入，未开始采集');
     }
-    if (kind === 'screen' && !$('screenSource').value) {
+    if (kind === 'screen' && !demoMode && !$('screenSource').value) {
       inputControls[kind].checked = false;
       return showToast('请先选择窗口或屏幕');
     }
@@ -1044,11 +1048,17 @@
     invalidateModelRequest();
     mediaCalls += 1;
     try {
-      if (kind === 'screen') {
+      if (kind === 'screen' && !demoMode) {
         const accepted = await api.capture.selectSource($('screenSource').value);
         if (!accepted) throw new Error('source_unavailable');
       }
-      const stream = kind === 'screen' && api.capture.nativeFrames === true && typeof api.capture.frame === 'function'
+      const stream = demoMode
+        ? (kind === 'screen'
+          ? nativeScreenStream
+          : kind === 'camera' && typeof MediaStream === 'function'
+            ? new MediaStream()
+            : { demoStream: true, getTracks: () => [] })
+        : kind === 'screen' && api.capture.nativeFrames === true && typeof api.capture.frame === 'function'
         ? nativeScreenStream
         : kind === 'screen'
           ? await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false })
@@ -1085,6 +1095,7 @@
     cueTimer = null;
     observations = [];
     latestObservationSummary = null;
+    latestObservationNextStep = null;
     cancelScreenAnalysis();
     cancelCapabilityRetry();
     messages.length = 0;
@@ -1173,6 +1184,9 @@
     if (state.phase !== PHASES.ACTIVE) return false;
     if (typeof observation?.summary === 'string' && observation.summary.trim() && observation.summary.trim().length <= 160) {
       latestObservationSummary = observation.summary.trim();
+      latestObservationNextStep = typeof observation.nextStep === 'string' && observation.nextStep.trim()
+        ? observation.nextStep.trim()
+        : null;
     }
     observations.push(observation);
     observations = observations.slice(-3);
@@ -1193,6 +1207,9 @@
     const matched = observations.findLast((item) => item.eventKey === decision.eventKey);
     latestObservationSummary = typeof matched?.summary === 'string' && matched.summary.trim().length <= 160
       ? matched.summary.trim()
+      : null;
+    latestObservationNextStep = typeof matched?.nextStep === 'string' && matched.nextStep.trim()
+      ? matched.nextStep.trim()
       : null;
     clearTimeout(toastTimer);
     $('toast').dataset.show = 'false';
@@ -1243,6 +1260,17 @@
   function clearObservationNote() {
     $('observationNote').hidden = true;
     $('observationNoteText').textContent = '';
+    $('observationNextStep').hidden = true;
+    $('observationNextStep').textContent = '';
+  }
+
+  function renderObservationNote(observation = null) {
+    const summary = observation?.summary || latestObservationSummary;
+    const nextStep = observation?.nextStep || latestObservationNextStep;
+    $('observationNoteText').textContent = summary || '';
+    $('observationNextStep').textContent = nextStep ? `下一步：${nextStep}` : '';
+    $('observationNextStep').hidden = !nextStep;
+    $('observationNote').hidden = !summary;
   }
 
   function acceptNudge() {
@@ -1251,9 +1279,11 @@
     setPanel('assist', pet);
     $('conversation').replaceChildren();
     messages.length = 0;
-    const prompt = '我看到一个重复线索，可以一起看看。';
-    $('observationNoteText').textContent = latestObservationSummary || '';
-    $('observationNote').hidden = !latestObservationSummary;
+    const matched = observations.findLast((item) => item.eventKey === state.currentEventKey) || observations.at(-1);
+    const prompt = matched?.kind === 'missing_requirement' && matched.nextStep
+      ? `我看到当前页面少了${matched.summary.replace(/^当前页面少了/u, '').replace(/[。！？]$/u, '')}，下一步是：${matched.nextStep}`
+      : '我看到一个重复线索，可以一起看看。';
+    renderObservationNote(matched);
     addMessage('assistant', prompt, false, 'local');
     speak(prompt);
     render();
@@ -1883,10 +1913,21 @@
     if (state.phase === PHASES.NUDGE) dismissNudge();
     setPanel('settings', source);
   }
+  function openSettingsSection(source, sectionId, inputId) {
+    openSettings(source);
+    requestAnimationFrame(() => {
+      const section = $(sectionId);
+      if (!section) return;
+      section.scrollIntoView({ block: 'start' });
+      $(inputId)?.focus();
+    });
+  }
   function openContext(source) { setPanel('context', source); }
 
   $('sessionButton').addEventListener('click', toggleSession);
   $('settingsButton').addEventListener('click', () => panel === 'settings' ? closePanel() : openSettings($('settingsButton')));
+  $('todoButton').addEventListener('click', () => openSettingsSection($('todoButton'), 'todoGroup', 'todoInput'));
+  $('noteButton').addEventListener('click', () => openSettingsSection($('noteButton'), 'noteGroup', 'noteInput'));
   $('dndButton').addEventListener('click', () => setDnd(!settings.dnd));
   $('simulateCue').addEventListener('click', simulateCueFlow);
   $('closeSettings').addEventListener('click', () => closePanel());
@@ -2043,9 +2084,11 @@
     api.window.focus();
     if (!sessionActive()) startSession();
     if (state.phase === PHASES.ACTIVE || state.phase === PHASES.COOLDOWN) {
+      const hadLiveCue = state.phase === PHASES.ACTIVE;
       cancelScreenAnalysis({ clearObservations: false });
       state = transition(state, { type: 'ENGAGE' });
-      clearObservationNote();
+      if (hadLiveCue) renderObservationNote();
+      else clearObservationNote();
       setPanel('assist', pet);
       render();
       return;
@@ -2205,6 +2248,16 @@
     render();
     void refreshModelCapabilities(true);
     api.app.rendererReady({ mediaCallsBeforeStart: mediaCalls, activeInputs: [...streams.keys()], phase: state.phase });
+    if (demoMode) {
+      settings.dnd = false;
+      settings.presentationMode = false;
+      settings.activeLevel = 'active';
+      settings.voice = false;
+      startSession();
+      window.setTimeout(() => emitCue(), 900);
+      window.setTimeout(() => emitCue(), 6100);
+      showToast('演示模式：将自动展示一次主动询问');
+    }
   }
 
   void initialize();

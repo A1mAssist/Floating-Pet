@@ -82,14 +82,14 @@
         <div id="memoryList" class="memory-list"></div>
       </div>
 
-      <div class="setting-group compact" aria-labelledby="todoHeading">
+      <div id="todoGroup" class="setting-group compact" aria-labelledby="todoHeading">
         <div class="group-heading"><h2 id="todoHeading">任务</h2><span id="todoCount">0 项</span></div>
         <form id="todoForm" class="local-entry-form"><input id="todoInput" maxlength="240" autocomplete="off" placeholder="添加本地任务"><button class="button primary" type="submit">添加</button></form>
         <p id="todoEmpty" class="setting-hint">还没有任务</p>
         <div id="todoList" class="local-list"></div>
       </div>
 
-      <div class="setting-group compact" aria-labelledby="noteHeading">
+      <div id="noteGroup" class="setting-group compact" aria-labelledby="noteHeading">
         <div class="group-heading"><h2 id="noteHeading">便签</h2><span id="noteCount">0 条</span></div>
         <form id="noteForm" class="local-entry-form"><textarea id="noteInput" maxlength="2000" rows="2" placeholder="写一条只保存在本机的便签"></textarea><button class="button primary" type="submit">保存</button></form>
         <p id="noteEmpty" class="setting-hint">还没有便签</p>
@@ -113,8 +113,9 @@
         <span id="realtimeStatus" role="status" aria-live="polite">麦克风关闭</span>
       </div>
       <div id="observationNote" class="observation-note" hidden>
-        <small>屏幕线索</small>
+        <small>当前会话线索</small>
         <span id="observationNoteText"></span>
+        <strong id="observationNextStep" hidden></strong>
       </div>
       <div id="focusTimer" class="focus-timer" aria-label="专注计时">
         <div class="focus-timer-heading"><strong>专注</strong><span><span id="focusStats">完成 0 次</span> · <span id="focusTimerStatus">未开始</span></span></div>
@@ -158,6 +159,11 @@
       <button id="sessionButton" data-testid="start" class="button primary session-button" type="button"><img id="sessionPlayIcon" src="icons/play.svg" alt=""><img id="sessionStopIcon" src="icons/circle-stop.svg" alt="" hidden><span>开始陪伴</span></button>
       <button id="dndButton" class="icon-button" type="button" aria-label="开启勿扰" aria-pressed="false"><img src="icons/moon.svg" alt=""></button>
       <button id="settingsButton" class="icon-button" type="button" aria-label="设置" aria-controls="settingsPanel" aria-expanded="false"><img src="icons/settings.svg" alt=""></button>
+    </div>
+
+    <div id="utilityControls" class="utility-controls interactive" role="group" aria-label="本地工具">
+      <button id="todoButton" class="icon-button" type="button" aria-label="任务" data-tooltip="任务"><img src="icons/check-square.svg" alt=""></button>
+      <button id="noteButton" class="icon-button" type="button" aria-label="便签" data-tooltip="便签"><img src="icons/sticky-note.svg" alt=""></button>
     </div>
 
     <button id="simulateCue" data-testid="run-fake-cue" type="button" hidden disabled>模拟重复错误</button>

@@ -203,7 +203,12 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   overflow: auto;
   overscroll-behavior: contain;
   scrollbar-width: none;
+  background: rgba(244, 248, 251, .9);
+  -webkit-backdrop-filter: blur(28px) saturate(145%);
+  backdrop-filter: blur(28px) saturate(145%);
 }
+
+.settings-panel > * { min-width: 0; }
 
 .settings-panel::-webkit-scrollbar { display: none; width: 0; height: 0; }
 
@@ -236,12 +241,12 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .connection-group { padding-bottom: 4px; }
 .connection-group .group-heading span[data-state="ready"] { color: var(--green-strong); }
 .connection-group .group-heading span[data-state="error"] { color: var(--danger); }
-.profile-field { margin: 0 0 10px; }
-.connection-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 4px 0; }
-.connection-actions .button { min-height: 38px; height: 38px; padding: 0 12px; font-size: 12px; }
+.profile-field { display: block; margin: 0 0 12px; }
+.connection-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 8px 0; }
+.connection-actions .button { flex: 0 0 auto; min-height: 38px; height: 38px; line-height: 1; padding: 0 12px; font-size: 12px; white-space: nowrap; }
 .field-row { display: flex; min-height: 66px; align-items: center; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(42, 58, 64, .1); cursor: text; }
 .field-row .setting-label { flex: 1 1 auto; }
-.field-control { width: min(52%, 210px); min-width: 0; height: 38px; border: 1px solid rgba(255, 255, 255, .62); border-radius: 14px; background: var(--recessed); box-shadow: var(--shadow-pressed); padding: 0 11px; font-size: 12px; user-select: text; }
+.field-control { flex: 0 1 210px; width: min(52%, 210px); min-width: 0; height: 38px; border: 1px solid rgba(255, 255, 255, .62); border-radius: 14px; background: var(--recessed); box-shadow: var(--shadow-pressed); padding: 0 11px; font-size: 12px; user-select: text; }
 .field-control:disabled { cursor: default; opacity: .48; }
 .setting-hint { margin: 8px 3px 0; color: var(--muted); font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; user-select: text; }
 .setting-hint + .setting-hint { margin-top: 3px; }
@@ -320,7 +325,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .setting-label small { display: block; margin-top: 2px; color: var(--muted); font-size: 11px; font-weight: 450; overflow-wrap: anywhere; }
 
 .screen-row { min-height: 96px; flex-wrap: wrap; padding: 9px 0; cursor: default; }
-.source-field { position: relative; width: 100%; margin-left: 27px; }
+.source-field { position: relative; width: 100%; min-width: 0; flex: 1 1 100%; margin-left: 0; }
 .source-field select {
   width: 100%;
   height: 42px;
@@ -384,35 +389,42 @@ button:focus-visible, input:focus-visible, select:focus-visible {
   height: min(360px, calc(100vh - 288px));
   min-height: 300px;
   flex-direction: column;
-  padding: 22px;
-  border-bottom-right-radius: 38px;
+  padding: 18px;
+  border-bottom-right-radius: 24px;
+  background: rgba(244, 248, 251, .9);
+  -webkit-backdrop-filter: blur(28px) saturate(145%);
+  backdrop-filter: blur(28px) saturate(145%);
 }
 .assist-card::after {
   content: "";
   position: absolute;
-  right: 62px;
-  bottom: -14px;
-  width: 30px;
-  height: 18px;
-  border-top: 1px solid rgba(255, 255, 255, .76);
-  background: rgba(225, 237, 246, .58);
-  clip-path: polygon(0 0, 100% 0, 70% 100%);
-  filter: drop-shadow(0 6px 5px rgba(28, 43, 58, .14));
+  right: 48px;
+  bottom: -7px;
+  width: 14px;
+  height: 14px;
+  border-right: 1px solid rgba(255, 255, 255, .62);
+  border-bottom: 1px solid rgba(255, 255, 255, .62);
+  border-bottom-right-radius: 4px;
+  background: rgba(244, 248, 251, .9);
+  box-shadow: 3px 3px 6px rgba(28, 43, 58, .08), inset -1px -1px 1px rgba(44, 65, 84, .06);
+  transform: rotate(45deg);
 }
+.assist-card .surface-header { margin-bottom: 10px; }
 .realtime-bar {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
-  padding: 0 0 12px;
+  padding: 0 0 7px;
 }
-.realtime-toggle { height: 38px; min-width: 128px; border-radius: 14px; padding: 0 13px; }
+.realtime-toggle { height: 38px; min-width: 128px; border-radius: 14px; padding: 0 13px; border-color: rgba(255, 255, 255, .86); background: rgba(255, 255, 255, .88); color: var(--ink); }
 .realtime-toggle[aria-pressed="true"] { border-color: rgba(255, 255, 255, .5); background: var(--green); box-shadow: 0 9px 19px rgba(17, 111, 101, .26), inset 0 1px 1px rgba(255, 255, 255, .4), inset 0 -1px 1px rgba(7, 70, 63, .3); color: #fff; }
 .realtime-toggle[aria-pressed="true"] img { filter: brightness(0) invert(1); }
 #realtimeStatus { color: var(--muted); font-size: 11px; line-height: 1.3; text-align: right; }
-.observation-note { display: flex; flex: 0 0 auto; flex-direction: column; gap: 4px; margin: 0 0 4px; padding: 9px 11px; border: 1px solid rgba(185, 120, 0, .2); border-radius: 14px; background: rgba(255, 246, 214, .38); color: #524b40; font-size: 11px; line-height: 1.45; overflow-wrap: anywhere; user-select: text; }
+.observation-note { display: flex; flex: 0 0 auto; flex-direction: column; gap: 2px; margin: 0 0 3px; padding: 7px 10px; border: 1px solid rgba(185, 120, 0, .2); border-radius: 12px; background: rgba(255, 246, 214, .38); color: #524b40; font-size: 11px; line-height: 1.4; overflow-wrap: anywhere; user-select: text; }
 .observation-note small { color: var(--gold); font-size: 10px; font-weight: 720; }
+.observation-note strong { color: var(--accent-strong); font-size: 11px; font-weight: 720; }
 .observation-note[hidden] { display: none; }
 .nudge-bubble::after {
   content: "";
@@ -430,19 +442,19 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 }
 .conversation {
   display: flex;
-  min-height: 0;
-  flex: 1 1 auto;
+  min-height: 82px;
+  flex: 1 1 82px;
   flex-direction: column;
   gap: 13px;
   overflow-y: auto;
-  padding: 13px 7px 16px 4px;
+  padding: 8px 0 9px;
   border-top: 1px solid var(--line);
   user-select: text;
   scrollbar-width: none;
 }
 .conversation::-webkit-scrollbar { display: none; width: 0; height: 0; }
 .message {
-  max-width: 86%;
+  max-width: calc(100% - 2px);
   padding: 12px 14px;
   border: 1px solid rgba(255, 255, 255, .78);
   border-radius: 20px;
@@ -466,7 +478,7 @@ button:focus-visible, input:focus-visible, select:focus-visible {
 .message small { display: block; margin-bottom: 5px; color: var(--muted); font-size: 10px; font-weight: 720; letter-spacing: 0; }
 .message.user small { color: rgba(255, 255, 255, .76); }
 .message.error { color: var(--danger); }
-.message-form { display: grid; flex: 0 0 auto; grid-template-columns: 1fr 44px; gap: 10px; padding-top: 14px; border-top: 1px solid var(--line); }
+.message-form { display: grid; flex: 0 0 auto; grid-template-columns: 1fr 44px; gap: 8px; padding-top: 9px; border-top: 1px solid var(--line); }
 .message-form input {
   min-width: 0;
   height: 44px;
@@ -604,6 +616,34 @@ body:not([data-phase="IDLE_VISIBLE"]) .quick-controls,
   background: transparent;
   box-shadow: none;
 }
+.utility-controls {
+  position: absolute;
+  left: 20px;
+  right: auto;
+  bottom: 84px;
+  z-index: 3;
+  display: flex;
+  gap: 6px;
+  width: 106px;
+  height: 52px;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border: 1px solid rgba(255, 255, 255, .76);
+  border-radius: 28px;
+  background: rgba(244, 249, 253, .82);
+  box-shadow: 0 9px 22px rgba(22, 38, 53, .13), inset 0 1px 0 rgba(255, 255, 255, .72);
+  -webkit-backdrop-filter: blur(24px) saturate(155%);
+  backdrop-filter: blur(24px) saturate(155%);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(6px);
+  transition: opacity 160ms var(--ease-out), transform 160ms var(--ease-out);
+}
+.utility-controls .icon-button { width: 44px; height: 44px; min-width: 44px; border-radius: 50%; background: transparent; box-shadow: none; }
+.utility-controls .icon-button img { width: 18px; height: 18px; }
+body:not([data-phase="IDLE_VISIBLE"]) .utility-controls,
+.utility-controls:focus-within { opacity: 1; pointer-events: auto; transform: translateY(0); }
 body:not([data-phase="IDLE_VISIBLE"]) .quick-controls .session-button {
   border-color: rgba(255, 255, 255, .82);
   background: rgba(255, 255, 255, .34);
@@ -810,6 +850,12 @@ body[data-dnd="true"] .status-light { background: var(--gold); box-shadow: 0 0 0
 @media (hover: hover) and (pointer: fine) {
   #stage:has(.pet:hover) .quick-controls,
   .quick-controls:hover {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
+  #stage:has(.pet:hover) .utility-controls,
+  .utility-controls:hover {
     opacity: 1;
     pointer-events: auto;
     transform: translateY(0);

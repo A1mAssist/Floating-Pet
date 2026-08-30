@@ -1,0 +1,29 @@
+appId: cn.local.floatingpet.demo
+productName: Floating Pet Demo
+extraMetadata:
+  main: src/main-demo.cjs
+asar: true
+compression: normal
+directories:
+  output: release-demo-final
+  buildResources: build
+files:
+  - src/main.cjs
+  - src/main-demo.cjs
+  - src/preload.cjs
+  - src/core.cjs
+  - src/config.cjs
+  - src/model-supervisor.cjs
+  - src/model-client.cjs
+  - src/realtime-client.cjs
+  - dist/**/*
+  - build/tray.png
+  - package.json
+  - LICENSE
+win:
+  icon: build/icon.ico
+  target:
+    - target: portable
+      arch: [x64]
+portable:
+  artifactName: Floating-Pet-Demo-Portable-${version}-${arch}.${ext}
