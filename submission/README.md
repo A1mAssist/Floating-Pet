@@ -5,6 +5,7 @@
 ## 这份提交包包含什么
 
 - `floating-pet-promo.html`：可离线打开的单文件宣传页，内嵌当前产品的宠物形象和托盘 Logo。
+- `fuban-promo.mp4`：90 秒产品宣传片，供宣传页和 GitHub Pages 直接播放。
 - `../desktop/release/Floating-Pet-Demo-Portable-0.1.0-x64.exe`：Windows 便携 Demo。
 - `../docs/demo-video-script.md`：宣传片脚本和演示流程参考。
 
@@ -19,7 +20,7 @@
 
 请保持本目录和 `../desktop/release/` 的相对位置不变，然后双击 HTML 文件查看宣传页，或运行 Windows Demo。Demo 默认静音，不会因为打开宣传页而播放系统 TTS。
 
-宣传片区域使用本地文件选择器播放，不会上传视频。当前提交包不把未验证的模型服务、统计数字或不存在的成片描述为已接通能力。
+宣传片已随页面提供，也可以用本地文件选择器临时替换播放，所选视频不会上传。当前提交包不把未验证的模型服务或 Mock 输出描述为真实模型能力。
 
 ## 验证边界
 

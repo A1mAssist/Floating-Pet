@@ -32,6 +32,8 @@
     .hero-copy { max-width: 540px; margin-top: 22px; color: var(--muted); font-size: 18px; }
     .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
     .asset-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .demo-status { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; color: var(--muted); font-size: 12px; }
+    .demo-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
     .button { display: inline-flex; min-height: 45px; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--ink); border-radius: 5px; padding: 0 17px; background: transparent; color: var(--ink); font-weight: 700; }
     .button:hover { border-color: var(--teal); color: var(--teal); }
     .button.primary { border-color: var(--teal); background: var(--teal); color: #fff; }
@@ -98,8 +100,9 @@
           <p class="kicker">Desktop companion / multimodal</p>
           <h1>看见现场，先问一句。</h1>
           <p class="hero-copy">浮伴安静地住在桌面上。需要时，它把眼前的线索、你的话和上下文放在一起，陪你把问题往前推一步。</p>
-          <div class="hero-actions"><a class="button primary" href="#film">观看宣传片</a><a class="button" href="../desktop/release/Floating-Pet-Demo-Portable-0.1.0-x64.exe">下载 Windows Demo</a></div>
-          <p class="asset-note">提交时请把 HTML 与 desktop/release 目录一起保留。</p>
+          <div class="hero-actions"><a class="button primary" href="#film">观看宣传片</a><a class="button" href="#capabilities">了解产品</a></div>
+          <p class="demo-status"><strong>在线 Demo</strong> Web 适配评估中</p>
+          <p class="asset-note">Windows 便携 Demo 随比赛提交包提供。</p>
         </div>
         <div class="pet-stage" aria-label="浮伴桌面陪伴预览">
           <span class="status-pill"><i></i>陪伴中 · 输入关闭</span>
@@ -137,11 +140,11 @@
       <div class="wrap">
         <div class="section-head"><h2>把产品流程交给真实画面。</h2><p>页面不重绘产品界面。选择提交包里的成片，即可在这里播放。</p></div>
         <div class="film-layout">
-          <div id="filmFrame" class="film-frame">
-            <video id="filmVideo" controls playsinline preload="metadata" aria-label="浮伴宣传片本地预览"></video>
+          <div id="filmFrame" class="film-frame has-video">
+            <video id="filmVideo" src="./fuban-promo.mp4" controls playsinline preload="metadata" aria-label="浮伴产品宣传片">您的浏览器不支持视频播放。</video>
             <div class="film-empty"><div><strong>宣传片播放位</strong><span>选择本地视频后即可预览。页面本身不依赖网络。</span></div></div>
           </div>
-          <div class="film-side"><div><h3>从卡住，到一起看看。</h3><p>展示默认安静、重复确认、主动询问、协助卡和用户收权的完整闭环。</p><label class="button primary" for="filmPicker">选择本地视频</label><input id="filmPicker" type="file" accept="video/*" aria-describedby="filmHint"><p id="filmHint" class="film-caption">本地播放 · 无外部依赖</p></div><p class="film-caption">视频不会上传。</p></div>
+          <div class="film-side"><div><h3>从卡住，到一起看看。</h3><p>展示默认安静、重复确认、主动询问、协助卡和用户收权的完整闭环。</p><label class="button primary" for="filmPicker">播放其他本地视频</label><input id="filmPicker" type="file" accept="video/*" aria-describedby="filmHint"><p id="filmHint" class="film-caption">成片已加载，可直接播放</p></div><p class="film-caption">本地视频不会上传。</p></div>
         </div>
       </div>
     </section>
