@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="浮伴 Floating Pet：看见现场，先问一句，再和你一起解决。">
+  <link rel="icon" type="image/png" href="./favicon.png">
   <title>浮伴 Floating Pet · MiniCPM-o 4.5</title>
   <style>
     :root { color-scheme: light; --paper: #edf3f2; --surface: #f9fcfb; --ink: #172126; --muted: #637172; --line: #cbd5d1; --teal: #167a70; --teal-soft: #d9eee8; --max: 1160px; font-family: "Segoe UI Variable", "Microsoft YaHei UI", system-ui, sans-serif; }
@@ -31,7 +32,9 @@
     h1 { max-width: 600px; font-size: clamp(40px, 4.6vw, 58px); line-height: 1.08; letter-spacing: -.035em; }
     .hero-copy { max-width: 540px; margin-top: 22px; color: var(--muted); font-size: 18px; }
     .hero-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 30px; }
-    .asset-note { margin-top: 10px; color: var(--muted); font-size: 12px; }
+    .download-link { display: flex; width: fit-content; align-items: baseline; gap: 10px; margin-top: 12px; border-bottom: 1px solid var(--teal); color: var(--teal); font-size: 13px; font-weight: 720; }
+    .download-link span { color: var(--muted); font-size: 11px; font-weight: 500; }
+    .download-link:hover, .download-link:focus-visible { color: #075f56; }
     .demo-status { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; color: var(--muted); font-size: 12px; }
     .demo-status::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--teal); }
     .button { display: inline-flex; min-height: 45px; align-items: center; justify-content: center; gap: 9px; border: 1px solid var(--ink); border-radius: 5px; padding: 0 17px; background: transparent; color: var(--ink); font-weight: 700; }
@@ -55,18 +58,11 @@
     .principle h3 { font-size: 22px; }
     .principle p { color: var(--muted); font-size: 14px; }
     .film-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(260px, .7fr); gap: 34px; align-items: stretch; }
-    .film-frame { position: relative; min-height: 365px; border: 1px solid var(--ink); border-radius: 8px; background: #172126; overflow: hidden; }
-    .film-frame video { display: block; width: 100%; height: 100%; min-height: 365px; object-fit: cover; background: #172126; }
-    .film-empty { position: absolute; inset: 0; display: grid; place-items: center; padding: 30px; color: #fff; text-align: center; pointer-events: none; }
-    .film-empty > div { max-width: 320px; }
-    .film-empty strong { display: block; font-size: 20px; }
-    .film-empty span { display: block; margin-top: 8px; color: #b8c7c4; font-size: 13px; }
-    .film-frame.has-video .film-empty { display: none; }
+    .film-frame { position: relative; aspect-ratio: 16 / 9; border: 1px solid var(--ink); border-radius: 8px; background: #172126; overflow: hidden; }
+    .film-frame video { display: block; width: 100%; height: 100%; object-fit: contain; background: #172126; }
     .film-side { display: flex; flex-direction: column; justify-content: space-between; border-top: 2px solid var(--teal); padding-top: 18px; }
     .film-side h3 { max-width: 300px; font-size: 27px; line-height: 1.2; }
     .film-side p { margin-top: 12px; color: var(--muted); }
-    .film-side label { display: inline-flex; width: fit-content; margin-top: 22px; }
-    .film-side input { position: absolute; width: 1px; height: 1px; opacity: 0; }
     .film-caption { padding-top: 22px; color: var(--teal); font-size: 12px; }
     .capabilities { display: grid; grid-template-columns: 1fr 1fr; column-gap: 48px; border-top: 1px solid var(--ink); }
     .capability { min-height: 170px; padding: 24px 0 28px; border-bottom: 1px solid var(--line); }
@@ -101,8 +97,8 @@
           <h1>看见现场，先问一句。</h1>
           <p class="hero-copy">浮伴安静地住在桌面上。需要时，它把眼前的线索、你的话和上下文放在一起，陪你把问题往前推一步。</p>
           <div class="hero-actions"><a class="button primary" href="https://floating-pet-web-demo.vercel.app/" target="_blank" rel="noopener">在线体验</a><a class="button" href="#film">观看宣传片</a><a class="button" href="#capabilities">了解产品</a></div>
-          <p class="demo-status"><strong>在线 Demo</strong> 本地模拟 · 固定静音 · 不连接模型服务</p>
-          <p class="asset-note">Windows 便携 Demo 随比赛提交包提供。</p>
+          <p class="demo-status"><strong>在线 Demo</strong> 本地模拟，固定静音，不连接模型服务</p>
+          <a class="download-link" href="https://github.com/A1mAssist/Floating-Pet-site/releases/download/windows-demo-0.1.0/Floating-Pet-Demo-Portable-0.1.0-x64.exe">下载 Windows 便携 Demo <span>Windows 10/11 x64，约 86 MB</span></a>
         </div>
         <div class="pet-stage" aria-label="浮伴桌面陪伴预览">
           <span class="status-pill"><i></i>陪伴中 · 输入关闭</span>
@@ -138,13 +134,12 @@
 
     <section id="film" class="content">
       <div class="wrap">
-        <div class="section-head"><h2>把产品流程交给真实画面。</h2><p>页面不重绘产品界面。选择提交包里的成片，即可在这里播放。</p></div>
+        <div class="section-head"><h2>把产品流程交给真实画面。</h2><p>宣传片记录 Windows Demo 的实际交互流程，可直接播放或全屏观看。</p></div>
         <div class="film-layout">
-          <div id="filmFrame" class="film-frame has-video">
-            <video id="filmVideo" src="./fuban-promo.mp4" controls playsinline preload="metadata" aria-label="浮伴产品宣传片">您的浏览器不支持视频播放。</video>
-            <div class="film-empty"><div><strong>宣传片播放位</strong><span>选择本地视频后即可预览。页面本身不依赖网络。</span></div></div>
+          <div class="film-frame">
+            <video src="./fuban-promo.mp4" controls playsinline preload="metadata" aria-label="浮伴产品宣传片">您的浏览器不支持视频播放。</video>
           </div>
-          <div class="film-side"><div><h3>从卡住，到一起看看。</h3><p>展示默认安静、重复确认、主动询问、协助卡和用户收权的完整闭环。</p><label class="button primary" for="filmPicker">播放其他本地视频</label><input id="filmPicker" type="file" accept="video/*" aria-describedby="filmHint"><p id="filmHint" class="film-caption">成片已加载，可直接播放</p></div><p class="film-caption">本地视频不会上传。</p></div>
+          <div class="film-side"><div><h3>从卡住，到一起看看。</h3><p>展示默认安静、重复确认、主动询问、协助卡和用户收权的完整闭环。</p></div><p class="film-caption">Windows Demo 实录 · 片长 1:30</p></div>
         </div>
       </div>
     </section>
@@ -170,26 +165,5 @@
   </main>
 
   <footer><div class="wrap"><p>浮伴 Floating Pet · MiniCPM-o 4.5</p><p>默认安静，按需开启，随时收回。</p></div></footer>
-  <script>
-    const picker = document.getElementById('filmPicker');
-    const video = document.getElementById('filmVideo');
-    const frame = document.getElementById('filmFrame');
-    const hint = document.getElementById('filmHint');
-    let objectUrl = '';
-    picker.addEventListener('change', () => {
-      const [file] = picker.files || [];
-      if (!file) return;
-      if (!file.type.startsWith('video/')) {
-        hint.textContent = '请选择视频文件。';
-        return;
-      }
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-      objectUrl = URL.createObjectURL(file);
-      video.src = objectUrl;
-      frame.classList.add('has-video');
-      hint.textContent = '正在播放本地视频，不会上传。';
-      video.play().catch(() => {});
-    });
-  </script>
 </body>
 </html>

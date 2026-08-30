@@ -275,8 +275,17 @@
     brand.append(icon, name);
     const badge = document.createElement('p');
     badge.className = 'web-demo-badge';
-    badge.textContent = 'Web Demo · 本地模拟，不连接模型服务';
-    bar.append(brand, badge);
+    badge.textContent = '本地模拟，固定静音，不连接模型服务';
+    const meta = document.createElement('div');
+    meta.className = 'web-demo-meta';
+    const siteLink = document.createElement('a');
+    siteLink.className = 'web-demo-site-link';
+    siteLink.href = 'https://a1massist.github.io/Floating-Pet-site/';
+    siteLink.target = '_blank';
+    siteLink.rel = 'noopener';
+    siteLink.textContent = '产品主页';
+    meta.append(siteLink, badge);
+    bar.append(brand, meta);
     document.body.prepend(bar);
     for (const id of blockedControls) {
       const control = document.getElementById(id);
