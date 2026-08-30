@@ -53,13 +53,17 @@ HarmonyOS NEXT PC 工程复用了 Renderer，并通过 ArkTS 能力桥接系统�
 
 ## Demo 运行方式
 
+无需安装的在线 Web Demo：[https://floating-pet-web-demo.vercel.app/](https://floating-pet-web-demo.vercel.app/)
+
+在线版本复用 Electron Renderer，可体验主动询问、Fake 对话、记忆、任务、便签和专注计时；数据只保存在当前浏览器。它固定静音，不请求麦克风、摄像头或屏幕权限，也不连接模型服务。
+
 ```powershell
 Set-Location .\desktop
 npm ci
 npm run start:fake
 ```
 
-提交包里还有一个单文件宣传页 `floating-pet-promo.html`。它可以离线打开，内嵌当前产品的宠物形象和托盘 Logo。宣传片区域通过本地文件选择器播放，视频不会上传。Windows Demo 的下载入口使用相对路径，提交时请保留 `submission` 和 `desktop/release` 的目录关系。
+提交包里还有一个单文件宣传页 `floating-pet-promo.html`。它可以离线打开，内嵌当前产品的宠物形象和托盘 Logo。宣传片随页面部署，也可以通过本地文件选择器临时替换，所选视频不会上传。Windows Demo 的下载入口使用相对路径，提交时请保留 `submission` 和 `desktop/release` 的目录关系。
 
 ## 能力边界
 

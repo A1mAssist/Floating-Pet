@@ -4,6 +4,8 @@ Windows 桌面悬浮陪伴应用，使用 Electron 提供透明置顶界面，�
 
 产品宣传页：[https://a1massist.github.io/Floating-Pet-site/](https://a1massist.github.io/Floating-Pet-site/)
 
+在线 Web Demo：[https://floating-pet-web-demo.vercel.app/](https://floating-pet-web-demo.vercel.app/)
+
 ## 项目说明
 
 浮伴（Floating Pet）是一只常驻 Windows 桌面的全模态陪伴宠物。它不把用户的工作区变成聊天窗口，而是先保持安静，在用户明确开启输入后，结合语音、视觉和当前上下文提供一次可拒绝的协助。
@@ -17,6 +19,7 @@ Windows 桌面悬浮陪伴应用，使用 Electron 提供透明置顶界面，�
 - `harmony/`：HarmonyOS NEXT PC 工程，复用 Renderer，并通过 ArkTS 能力桥接系统侧能力。
 - `submission/floating-pet-promo.html`：比赛提交用单文件宣传页，使用现有产品角色和托盘 Logo，可离线打开，并在 GitHub Pages 上播放随包提供的宣传片。
 - `submission/openbmb-project-description.md`：面向 OpenBMB 比赛评审的项目说明，可作为报名表或提交包中的项目介绍。
+- `web-demo/`：复用 Electron Renderer 的静态 Web Demo；使用本地 Fake 回应和浏览器存储，不连接模型服务或采集媒体。
 - `docs/`：产品、模型服务、部署和验收记录。
 
 ### 快速体验

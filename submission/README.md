@@ -4,6 +4,8 @@
 
 线上宣传页：[https://a1massist.github.io/Floating-Pet-site/](https://a1massist.github.io/Floating-Pet-site/)
 
+在线 Web Demo：[https://floating-pet-web-demo.vercel.app/](https://floating-pet-web-demo.vercel.app/)
+
 ## 这份提交包包含什么
 
 - `floating-pet-promo.html`：可离线打开的单文件宣传页，内嵌当前产品的宠物形象和托盘 Logo。
@@ -22,7 +24,7 @@
 
 请保持本目录和 `../desktop/release/` 的相对位置不变，然后双击 HTML 文件查看宣传页，或运行 Windows Demo。Demo 默认静音，不会因为打开宣传页而播放系统 TTS。
 
-宣传片已随页面提供，也可以用本地文件选择器临时替换播放，所选视频不会上传。当前提交包不把未验证的模型服务或 Mock 输出描述为真实模型能力。
+宣传片已随页面提供，也可以用本地文件选择器临时替换播放，所选视频不会上传。在线 Web Demo 只展示客户端交互、本地数据与 Fake 对话，不采集媒体、不播放语音，也不把 Mock 输出描述为真实模型能力。
 
 ## 验证边界
 

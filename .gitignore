@@ -12,6 +12,7 @@ desktop/release-preview.png
 desktop/release-realtime-preview.png
 desktop/release/
 desktop/dist/
+/web-demo/dist/
 harmony/.hvigor/
 harmony/entry/build/
 harmony/oh_modules/
