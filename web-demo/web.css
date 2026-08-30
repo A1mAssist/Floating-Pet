@@ -41,11 +41,14 @@ body {
 }
 
 .web-demo-site-link {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
   border: 1px solid rgba(255, 255, 255, .26);
   border-radius: 5px;
-  padding: 7px 10px;
+  padding: 0 14px;
   color: #f7fbfa;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 700;
   text-decoration: none;
 }
@@ -142,7 +145,7 @@ body[data-web-demo="true"] #realtimeToggle {
   .web-demo-brand { gap: 7px; }
   .web-demo-brand img { width: 24px; height: 24px; }
   .web-demo-meta { gap: 8px; }
-  .web-demo-site-link { padding: 6px 8px; font-size: 11px; }
+  .web-demo-site-link { min-height: 34px; padding: 0 11px; font-size: 12px; }
   .web-demo-badge { display: none; }
 }
 
