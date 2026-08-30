@@ -2,6 +2,8 @@
 
 浮伴是一只常驻 Windows 桌面的全模态陪伴宠物。它把模型能力放在需要的时刻：平时安静存在，用户明确开启输入后，再结合语音、视觉和当前上下文一起处理问题。
 
+线上宣传页：[https://a1massist.github.io/Floating-Pet-site/](https://a1massist.github.io/Floating-Pet-site/)
+
 ## 这份提交包包含什么
 
 - `floating-pet-promo.html`：可离线打开的单文件宣传页，内嵌当前产品的宠物形象和托盘 Logo。

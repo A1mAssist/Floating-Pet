@@ -2,6 +2,8 @@
 
 Windows 桌面悬浮陪伴应用，使用 Electron 提供透明置顶界面，并通过独立 Python 服务连接 MiniCPM-o 的回合制多模态与实时音视频能力。
 
+产品宣传页：[https://a1massist.github.io/Floating-Pet-site/](https://a1massist.github.io/Floating-Pet-site/)
+
 ## 项目说明
 
 浮伴（Floating Pet）是一只常驻 Windows 桌面的全模态陪伴宠物。它不把用户的工作区变成聊天窗口，而是先保持安静，在用户明确开启输入后，结合语音、视觉和当前上下文提供一次可拒绝的协助。
