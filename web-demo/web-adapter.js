@@ -262,10 +262,22 @@
   document.addEventListener('DOMContentLoaded', () => {
     document.title = '浮伴 Floating Pet · Web Demo';
     document.body.dataset.webDemo = 'true';
+    const bar = document.createElement('header');
+    bar.className = 'web-demo-bar';
+    bar.setAttribute('aria-label', '浮伴 Web Demo');
+    const brand = document.createElement('span');
+    brand.className = 'web-demo-brand';
+    const icon = document.createElement('img');
+    icon.src = 'favicon.png';
+    icon.alt = '';
+    const name = document.createElement('strong');
+    name.textContent = '浮伴';
+    brand.append(icon, name);
     const badge = document.createElement('p');
     badge.className = 'web-demo-badge';
     badge.textContent = 'Web Demo · 本地模拟，不连接模型服务';
-    document.body.prepend(badge);
+    bar.append(brand, badge);
+    document.body.prepend(bar);
     for (const id of blockedControls) {
       const control = document.getElementById(id);
       if (!control) continue;
