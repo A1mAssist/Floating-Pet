@@ -1,4 +1,4 @@
-# 浮伴 Floating Pet
+# 浮伴（Floating Pet）
 
 ## 项目简介
 
